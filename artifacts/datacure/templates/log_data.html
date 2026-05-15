@@ -1,0 +1,187 @@
+{% extends "base.html" %}
+{% block title %}Log Data — Datacure{% endblock %}
+{% block content %}
+
+<div class="page-header">
+  <h1>Log Saved Data</h1>
+  <p class="page-sub">Track your savings and earn coins instantly</p>
+</div>
+
+<div class="form-page-grid">
+  <div class="card form-card" id="log-card">
+
+    <div id="success-overlay" class="success-overlay" style="display:none;">
+      <div class="success-icon">🪙</div>
+      <div class="success-heading" id="success-heading">+0 Coins Earned!</div>
+      <div class="success-sub">Great job saving data!</div>
+      <div class="success-total">Balance: <strong id="success-total-val">0</strong> coins</div>
+      <button class="btn btn-primary" onclick="resetForm()" style="margin-top:1.25rem;">Log More</button>
+    </div>
+
+    <div id="error-banner" class="alert alert-error" style="display:none;"></div>
+
+    <div id="log-form-wrap">
+      <div class="form-group">
+        <label for="mb_input">Data Saved (MB)</label>
+        <div class="slider-wrap">
+          <input type="range" id="mb_slider" min="0" max="1000" step="1" value="0"
+                 class="mb-slider" oninput="syncFromSlider(this.value)" />
+          <div class="slider-labels"><span>0</span><span>500</span><span>1000</span></div>
+        </div>
+        <div class="input-with-unit" style="margin-top:0.75rem;">
+          <input type="number" id="mb_input" min="1" max="2000" step="1"
+                 placeholder="1 – 2000" oninput="syncFromInput(this.value)" />
+          <span class="input-unit">MB</span>
+        </div>
+        <small class="field-hint">1–2000 MB · Floor division per 100 MB</small>
+      </div>
+
+      <div class="coin-preview" id="coin-preview" style="display:none;">
+        <span class="preview-label">You will earn:</span>
+        <span class="preview-value text-green" id="preview-coins">0</span>
+        <span class="preview-unit">coins</span>
+        <span class="preview-note" id="preview-note"></span>
+      </div>
+
+      <button class="btn btn-primary btn-full" id="log-btn" onclick="submitLog()" disabled>
+        Log &amp; Earn Coins
+      </button>
+      <p class="submit-note">Coins calculated server-side after submission</p>
+    </div>
+  </div>
+
+  <div class="side-info">
+    <div class="card info-card">
+      <h3 class="info-title">Coin Rates</h3>
+      <div class="calc-table">
+        {% for mb, coins in [(100, coins_per_100mb), (200, coins_per_100mb*2), (500, coins_per_100mb*5), (1000, coins_per_100mb*10), (2000, coins_per_100mb*20)] %}
+        <div class="calc-row">
+          <span>{{ mb }} MB</span><span class="calc-val text-green">{{ coins }} coins</span>
+        </div>
+        {% endfor %}
+      </div>
+      <p class="info-note"><code>floor(MB ÷ 100) × 5</code></p>
+    </div>
+
+    <div class="card info-card" style="margin-top:1rem;">
+      <h3 class="info-title">Your Balance</h3>
+      <div class="balance-display">
+        <span class="balance-coins text-green" id="side-balance">{{ user['coins'] }}</span>
+        <span class="balance-unit">coins</span>
+      </div>
+      <p class="balance-sub">≈ ₹{{ "%.2f"|format(user['coins'] / 100) }}</p>
+    </div>
+  </div>
+</div>
+
+{% endblock %}
+{% block scripts %}
+<script>
+const COINS_PER_100MB = {{ coins_per_100mb }};
+const MB_PER_REWARD   = {{ mb_per_reward }};
+let submitToken       = "{{ submit_token }}";
+let submitting        = false;
+
+function updateSliderFill(slider) {
+  const pct = ((parseInt(slider.value) - parseInt(slider.min)) /
+               (parseInt(slider.max) - parseInt(slider.min))) * 100;
+  slider.style.background = `linear-gradient(to right, var(--green) ${pct}%, var(--border) ${pct}%)`;
+}
+
+function syncFromSlider(val) {
+  const slider = document.getElementById('mb_slider');
+  document.getElementById('mb_input').value = val > 0 ? parseInt(val) : '';
+  updateSliderFill(slider);
+  updatePreview(parseInt(val));
+}
+
+function syncFromInput(val) {
+  const n = parseInt(val) || 0;
+  const slider = document.getElementById('mb_slider');
+  slider.value = Math.min(n, 1000);
+  updateSliderFill(slider);
+  updatePreview(n);
+}
+
+function updatePreview(mb) {
+  const preview = document.getElementById('coin-preview');
+  const previewVal = document.getElementById('preview-coins');
+  const note = document.getElementById('preview-note');
+  const btn = document.getElementById('log-btn');
+  if (mb > 0 && mb <= 2000) {
+    const coins = Math.floor(mb / MB_PER_REWARD) * COINS_PER_100MB;
+    const leftover = mb % 100;
+    preview.style.display = 'flex';
+    previewVal.textContent = coins;
+    note.textContent = leftover > 0 ? `(${leftover} MB remainder ignored)` : '';
+    btn.disabled = false;
+  } else {
+    preview.style.display = 'none';
+    btn.disabled = true;
+  }
+}
+
+function submitLog() {
+  if (submitting) return;
+  const mb = parseInt(document.getElementById('mb_input').value);
+  const btn = document.getElementById('log-btn');
+  const err = document.getElementById('error-banner');
+  err.style.display = 'none';
+  if (!mb || mb < 1 || mb > 2000) { showError('Enter a value between 1 and 2000 MB.'); return; }
+  submitting = true;
+  btn.disabled = true;
+  btn.textContent = 'Logging…';
+  fetch('/api/log-data', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ mb_saved: mb, token: submitToken })
+  })
+  .then(r => r.json())
+  .then(data => {
+    submitting = false;
+    if (data.success) {
+      submitToken = data.next_token;
+      showSuccess(data.new_coins, data.total_coins, mb);
+      document.getElementById('side-balance').textContent = data.total_coins;
+      const topbar = document.getElementById('topbar-coins-val');
+      if (topbar) topbar.textContent = data.total_coins;
+    } else {
+      btn.disabled = false;
+      btn.textContent = 'Log & Earn Coins';
+      showError(data.error || 'Something went wrong.');
+    }
+  })
+  .catch(() => {
+    submitting = false;
+    btn.disabled = false;
+    btn.textContent = 'Log & Earn Coins';
+    showError('Network error. Please check your connection.');
+  });
+}
+
+function showError(msg) {
+  const err = document.getElementById('error-banner');
+  err.textContent = msg;
+  err.style.display = 'block';
+}
+
+function showSuccess(newCoins, totalCoins, mb) {
+  document.getElementById('success-heading').textContent = `+${newCoins} Coins Earned!`;
+  document.getElementById('success-total-val').textContent = totalCoins;
+  document.getElementById('success-overlay').style.display = 'flex';
+  document.getElementById('log-form-wrap').style.display = 'none';
+}
+
+function resetForm() {
+  document.getElementById('success-overlay').style.display = 'none';
+  document.getElementById('log-form-wrap').style.display = 'block';
+  document.getElementById('mb_input').value = '';
+  document.getElementById('mb_slider').value = 0;
+  updateSliderFill(document.getElementById('mb_slider'));
+  document.getElementById('coin-preview').style.display = 'none';
+  const btn = document.getElementById('log-btn');
+  btn.disabled = true;
+  btn.textContent = 'Log & Earn Coins';
+}
+</script>
+{% endblock %}

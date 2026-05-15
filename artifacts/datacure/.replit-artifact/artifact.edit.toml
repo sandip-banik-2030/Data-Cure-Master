@@ -1,0 +1,19 @@
+kind = "api"
+previewPath = "/"
+title = "Datacure"
+version = "1.0.0"
+id = "datacure-flask-app-001"
+
+[[services]]
+localPort = 5000
+name = "Datacure Flask App"
+paths = ["/"]
+
+[services.development]
+run = "python artifacts/datacure/run.py"
+
+[services.production.run]
+args = ["python", "artifacts/datacure/run.py"]
+
+[services.production.run.env]
+PORT = "5000"

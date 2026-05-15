@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% block title %}My Requests — Datacure{% endblock %}
+{% block content %}
+
+<div class="page-header">
+  <h1>My Requests</h1>
+  <p class="page-sub">Your recharge redemption history</p>
+</div>
+
+<div class="requests-page">
+  {% if requests %}
+  <div class="requests-list">
+    {% for r in requests %}
+    <div class="request-card">
+      <div class="request-top">
+        <div class="request-pack">
+          <span class="request-icon">📱</span>
+          <div>
+            <div class="request-amount">₹{{ r['recharge_amount'] }} Recharge</div>
+            <div class="request-phone">{{ decode_phone(r['phone_number']) }} · {{ r['operator'] }}</div>
+          </div>
+        </div>
+        <span class="status-badge status-{{ r['status'] }}">{{ r['status'] }}</span>
+      </div>
+      <div class="request-bottom">
+        <span class="request-coins">-{{ r['coins_used'] }} coins</span>
+        <span class="request-date">{{ r['created_at'][:16].replace('T', ' ') }}</span>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+  {% else %}
+  <div class="empty-page">
+    <div class="empty-icon">📋</div>
+    <h2>No requests yet</h2>
+    <p>Your recharge redemptions will appear here.</p>
+    <a href="{{ url_for('redeem') }}" class="btn btn-primary">Redeem Now</a>
+  </div>
+  {% endif %}
+</div>
+
+{% endblock %}

@@ -1,0 +1,182 @@
+{% extends "base.html" %}
+{% block title %}Rewards — Datacure{% endblock %}
+{% block content %}
+
+<div class="page-header">
+  <h1>Reward Ads</h1>
+  <p class="page-sub">Watch a 15-second ad to earn <strong class="text-green">{{ coins_per_ad }} coins</strong></p>
+</div>
+
+<div class="rewards-layout">
+  <div class="card ad-card">
+    <div class="ad-icon-wrap">
+      <div class="ad-ring" id="ad-ring"></div>
+      <div class="ad-icon">▶</div>
+    </div>
+    <h2 class="ad-title">Watch a Reward Ad</h2>
+    <p class="ad-desc">Each full ad earns you <strong class="text-green">{{ coins_per_ad }} coins</strong></p>
+
+    <div class="ad-progress-wrap">
+      <div class="ad-progress-bar">
+        <div class="ad-progress-fill" id="daily-bar"
+             style="width: {{ [(ads_today / max_ads) * 100, 100]|min }}%"></div>
+      </div>
+      <span class="ad-progress-label">
+        <span id="ads-today">{{ ads_today }}</span> / {{ max_ads }} ads watched today
+      </span>
+    </div>
+
+    {% if ads_today >= max_ads %}
+    <div class="alert alert-warning" style="margin-top:1rem;">
+      Daily limit of {{ max_ads }} ads reached. Come back tomorrow!
+    </div>
+    <button class="btn btn-primary btn-full" disabled>Daily Limit Reached</button>
+    {% else %}
+    <div id="ad-status" class="alert" style="display:none;margin-top:0.5rem;"></div>
+    <div id="ad-timer-wrap" style="display:none;">
+      <div class="ad-timer-circle">
+        <svg viewBox="0 0 80 80">
+          <circle cx="40" cy="40" r="34" fill="none" stroke="var(--border)" stroke-width="6"/>
+          <circle id="timer-arc" cx="40" cy="40" r="34" fill="none" stroke="var(--green)"
+                  stroke-width="6" stroke-linecap="round"
+                  stroke-dasharray="213.63" stroke-dashoffset="213.63"
+                  transform="rotate(-90 40 40)"/>
+        </svg>
+        <span id="timer-text" class="timer-text">15</span>
+      </div>
+      <p class="timer-label">Watching ad…</p>
+    </div>
+    <button class="btn btn-primary btn-full" id="watch-btn" onclick="startAd()">
+      Watch Ad (+{{ coins_per_ad }} coins)
+    </button>
+    {% endif %}
+  </div>
+
+  <div class="card stats-card">
+    <h3 class="card-title">Your Ad Stats</h3>
+    <div class="ad-stat-row">
+      <span class="ad-stat-label">Total Ads Watched</span>
+      <span class="ad-stat-val text-green">{{ user['total_ads_watched'] }}</span>
+    </div>
+    <div class="ad-stat-row">
+      <span class="ad-stat-label">Today</span>
+      <span class="ad-stat-val">{{ ads_today }}/{{ max_ads }}</span>
+    </div>
+    <div class="ad-stat-row">
+      <span class="ad-stat-label">Coins from Ads</span>
+      <span class="ad-stat-val text-green">{{ user['total_ads_watched'] * coins_per_ad }}</span>
+    </div>
+  </div>
+</div>
+
+{% endblock %}
+{% block scripts %}
+<script>
+const COINS_PER_AD = {{ coins_per_ad }};
+const MAX_ADS = {{ max_ads }};
+let adToken = null;
+let timerInterval = null;
+
+function startAd() {
+  const btn = document.getElementById('watch-btn');
+  const status = document.getElementById('ad-status');
+  btn.disabled = true;
+  btn.textContent = 'Starting…';
+  status.style.display = 'none';
+
+  fetch('/api/ad/start', { method: 'POST', headers: {'Content-Type': 'application/json'} })
+  .then(r => r.json())
+  .then(data => {
+    if (!data.ok) {
+      btn.disabled = false;
+      btn.textContent = 'Watch Ad (+' + COINS_PER_AD + ' coins)';
+      showAdStatus(data.reason === 'daily_limit' ? 'Daily limit reached!' : 'Error starting ad.', 'error');
+      return;
+    }
+    adToken = data.token;
+    startTimer(data.duration || 15);
+  })
+  .catch(() => {
+    btn.disabled = false;
+    btn.textContent = 'Watch Ad (+' + COINS_PER_AD + ' coins)';
+    showAdStatus('Network error. Try again.', 'error');
+  });
+}
+
+function startTimer(duration) {
+  const timerWrap = document.getElementById('ad-timer-wrap');
+  const btn = document.getElementById('watch-btn');
+  const arc = document.getElementById('timer-arc');
+  const timerText = document.getElementById('timer-text');
+  const circumference = 213.63;
+
+  timerWrap.style.display = 'flex';
+  btn.style.display = 'none';
+
+  let remaining = duration;
+  timerText.textContent = remaining;
+
+  timerInterval = setInterval(() => {
+    remaining--;
+    timerText.textContent = remaining;
+    const progress = (duration - remaining) / duration;
+    arc.style.strokeDashoffset = circumference * (1 - progress);
+    if (remaining <= 0) {
+      clearInterval(timerInterval);
+      completeAd();
+    }
+  }, 1000);
+}
+
+function completeAd() {
+  fetch('/api/ad/complete', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({ token: adToken })
+  })
+  .then(r => r.json())
+  .then(data => {
+    const timerWrap = document.getElementById('ad-timer-wrap');
+    const btn = document.getElementById('watch-btn');
+    timerWrap.style.display = 'none';
+
+    if (data.ok) {
+      const adsToday = data.ads_today;
+      document.getElementById('ads-today').textContent = adsToday;
+      document.getElementById('daily-bar').style.width = Math.min((adsToday / MAX_ADS) * 100, 100) + '%';
+      const topbar = document.getElementById('topbar-coins-val');
+      if (topbar) topbar.textContent = data.total_coins;
+      showAdStatus('🎉 +' + COINS_PER_AD + ' coins earned!', 'success');
+
+      if (adsToday >= MAX_ADS) {
+        btn.textContent = 'Daily Limit Reached';
+        btn.disabled = true;
+      } else {
+        btn.textContent = 'Watch Ad (+' + COINS_PER_AD + ' coins)';
+        btn.disabled = false;
+      }
+      btn.style.display = 'block';
+    } else {
+      btn.textContent = 'Watch Ad (+' + COINS_PER_AD + ' coins)';
+      btn.disabled = false;
+      btn.style.display = 'block';
+      showAdStatus(data.error || 'Error claiming reward.', 'error');
+    }
+  })
+  .catch(() => {
+    const btn = document.getElementById('watch-btn');
+    btn.textContent = 'Watch Ad (+' + COINS_PER_AD + ' coins)';
+    btn.disabled = false;
+    btn.style.display = 'block';
+    showAdStatus('Network error.', 'error');
+  });
+}
+
+function showAdStatus(msg, type) {
+  const status = document.getElementById('ad-status');
+  status.textContent = msg;
+  status.className = 'alert alert-' + (type === 'success' ? 'success' : 'error');
+  status.style.display = 'block';
+}
+</script>
+{% endblock %}

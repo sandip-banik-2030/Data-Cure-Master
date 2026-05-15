@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>{% block title %}Datacure{% endblock %}</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}" />
+</head>
+<body class="{{ 'app-body' if session.get('user_id') else 'auth-body' }}">
+
+{% if session.get('user_id') %}
+<header class="topbar">
+  <div class="topbar-brand">
+    <span class="brand-icon">⚡</span>
+    <span class="brand-name">Datacure</span>
+  </div>
+  <div class="topbar-right">
+    <span class="topbar-coins">🪙 <span id="topbar-coins-val">{{ get_user_coins() }}</span></span>
+    <a href="{{ url_for('logout') }}" class="topbar-logout">Logout</a>
+  </div>
+</header>
+<nav class="bottom-nav">
+  <a href="{{ url_for('dashboard') }}" class="bnav-item {% if request.endpoint == 'dashboard' %}active{% endif %}">
+    <span class="bnav-icon">⊞</span><span class="bnav-label">Home</span>
+  </a>
+  <a href="{{ url_for('log_data') }}" class="bnav-item {% if request.endpoint == 'log_data' %}active{% endif %}">
+    <span class="bnav-icon">📶</span><span class="bnav-label">Log Data</span>
+  </a>
+  <a href="{{ url_for('rewards') }}" class="bnav-item {% if request.endpoint == 'rewards' %}active{% endif %}">
+    <span class="bnav-icon">▶</span><span class="bnav-label">Ads</span>
+  </a>
+  <a href="{{ url_for('redeem') }}" class="bnav-item {% if request.endpoint == 'redeem' %}active{% endif %}">
+    <span class="bnav-icon">📱</span><span class="bnav-label">Redeem</span>
+  </a>
+  <a href="{{ url_for('my_requests') }}" class="bnav-item {% if request.endpoint == 'my_requests' %}active{% endif %}">
+    <span class="bnav-icon">📋</span><span class="bnav-label">History</span>
+  </a>
+</nav>
+<main class="main-content">
+{% else %}
+<main class="auth-main">
+{% endif %}
+
+  {% block content %}{% endblock %}
+
+</main>
+
+<script src="{{ url_for('static', filename='js/app.js') }}"></script>
+{% block scripts %}{% endblock %}
+</body>
+</html>

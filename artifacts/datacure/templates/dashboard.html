@@ -1,0 +1,148 @@
+{% extends "base.html" %}
+{% block title %}Dashboard — Datacure{% endblock %}
+{% block content %}
+
+<div class="page-header">
+  <h1>Hey, <span class="text-green">{{ user['name'] }}</span> 👋</h1>
+  <p class="page-sub">Your reward summary</p>
+</div>
+
+<!-- Stats Grid -->
+<div class="stats-grid">
+  <div class="stat-card stat-coins">
+    <div class="stat-icon">🪙</div>
+    <div class="stat-value" id="dash-coins">{{ user['coins'] }}</div>
+    <div class="stat-label">Total Coins</div>
+  </div>
+  <div class="stat-card stat-rupees">
+    <div class="stat-icon">₹</div>
+    <div class="stat-value">{{ "%.2f"|format(rupees_balance) }}</div>
+    <div class="stat-label">Recharge Value</div>
+  </div>
+  <div class="stat-card stat-data">
+    <div class="stat-icon">📶</div>
+    <div class="stat-value">{{ "%.0f"|format(user['lifetime_data_saved']) }}</div>
+    <div class="stat-label">MB Saved Total</div>
+  </div>
+  <div class="stat-card stat-ads">
+    <div class="stat-icon">▶</div>
+    <div class="stat-value">{{ ads_today }}<span class="stat-max">/{{ max_ads }}</span></div>
+    <div class="stat-label">Ads Today</div>
+  </div>
+</div>
+
+<!-- Streak Card -->
+<div class="streak-card">
+  {% if streak_info.bonus_granted %}
+  <div class="streak-bonus-flash">
+    🎉 +{{ streak_info.bonus_coins }} streak bonus coins earned today!
+  </div>
+  {% endif %}
+
+  <div class="streak-body">
+    <div class="streak-flame-wrap">
+      <div class="streak-flame {% if streak_info.streak >= 7 %}streak-flame-gold{% endif %}">🔥</div>
+      <div class="streak-count">{{ streak_info.streak }}</div>
+      <div class="streak-label">day streak</div>
+    </div>
+
+    <div class="streak-progress-wrap">
+      <div class="streak-progress-header">
+        <span class="streak-progress-title">
+          {% if streak_info.streak == 0 %}
+            Log in daily to start your streak
+          {% elif streak_info.days_to_target == streak_info.target %}
+            🏆 {{ streak_info.streak }}-day milestone reached!
+          {% else %}
+            {{ streak_info.days_to_target }} day{{ 's' if streak_info.days_to_target != 1 }} to next {{ streak_info.target }}-day milestone
+          {% endif %}
+        </span>
+        <span class="streak-frac">{{ streak_info.streak % streak_info.target }}/{{ streak_info.target }}</span>
+      </div>
+      <div class="streak-bar-track">
+        <div class="streak-bar-fill" style="width: {{ [streak_info.progress, 100]|min }}%"></div>
+      </div>
+      <div class="streak-meta">
+        <span>+{{ streak_info.bonus_coins_per_day }} coins/day</span>
+        <span>+{{ streak_info.bonus_coins_per_day * streak_info.target }} coins at {{ streak_info.target }}-day milestone</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Quick Actions -->
+<div class="section">
+  <h2 class="section-title">Quick Actions</h2>
+  <div class="action-row">
+    <a href="{{ url_for('log_data') }}" class="action-btn">
+      <span class="action-icon">📶</span>
+      <span class="action-label">Log Data</span>
+      <span class="action-hint">5 coins/100MB</span>
+    </a>
+    <a href="{{ url_for('rewards') }}" class="action-btn">
+      <span class="action-icon">▶</span>
+      <span class="action-label">Watch Ad</span>
+      <span class="action-hint">10 coins each</span>
+    </a>
+    <a href="{{ url_for('redeem') }}" class="action-btn">
+      <span class="action-icon">📱</span>
+      <span class="action-label">Redeem</span>
+      <span class="action-hint">₹15 or ₹20</span>
+    </a>
+  </div>
+</div>
+
+<!-- Lower Section -->
+<div class="lower-grid">
+  <div class="card">
+    <h2 class="card-title">Recent Transactions</h2>
+    {% if recent %}
+    <ul class="activity-list">
+      {% for item in recent %}
+      <li class="activity-item">
+        <div class="activity-icon-wrap">
+          <span class="activity-icon">
+            {% if 'MB' in item['description'] %}📶
+            {% elif 'ad' in item['description']|lower %}▶
+            {% elif 'Recharge' in item['description'] %}📱
+            {% elif 'streak' in item['description']|lower %}🔥
+            {% else %}🪙{% endif %}
+          </span>
+        </div>
+        <div class="activity-body">
+          <span class="activity-detail">{{ item['description'] }}</span>
+          <span class="activity-time">{{ item['created_at'][:16].replace('T', ' ') }}</span>
+        </div>
+        <span class="activity-coins {% if item['transaction_type'] == 'credit' %}coins-plus{% else %}coins-minus{% endif %}">
+          {% if item['transaction_type'] == 'credit' %}+{% else %}-{% endif %}{{ item['amount'] }}
+        </span>
+      </li>
+      {% endfor %}
+    </ul>
+    {% else %}
+    <p class="empty-state">No activity yet. Start earning!</p>
+    {% endif %}
+  </div>
+
+  <div class="card">
+    <h2 class="card-title">Recent Redemptions</h2>
+    {% if redemptions %}
+    <ul class="redemption-list">
+      {% for r in redemptions %}
+      <li class="redemption-item">
+        <div class="redemption-body">
+          <span class="redemption-amount">₹{{ r['recharge_amount'] }}</span>
+          <span class="redemption-phone">to {{ decode_phone(r['phone_number']) }}</span>
+          <span class="redemption-time">{{ r['created_at'][:10] }}</span>
+        </div>
+        <span class="status-badge status-{{ r['status'] }}">{{ r['status'] }}</span>
+      </li>
+      {% endfor %}
+    </ul>
+    {% else %}
+    <p class="empty-state">No redemptions yet. Earn coins and redeem!</p>
+    {% endif %}
+  </div>
+</div>
+
+{% endblock %}

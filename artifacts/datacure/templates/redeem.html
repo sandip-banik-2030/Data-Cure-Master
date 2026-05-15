@@ -1,0 +1,158 @@
+{% extends "base.html" %}
+{% block title %}Redeem — Datacure{% endblock %}
+{% block content %}
+
+<div class="page-header">
+  <h1>Redeem Coins</h1>
+  <p class="page-sub">Convert coins into mobile recharge</p>
+</div>
+
+<div class="redeem-layout">
+  <div class="redeem-main">
+
+    <div class="redeem-balance-banner">
+      <span class="rb-label">Your Balance</span>
+      <span class="rb-coins text-green">{{ user['coins'] }}</span>
+      <span class="rb-unit">coins</span>
+      <span class="rb-rupees">≈ ₹{{ "%.2f"|format(user['coins'] / coins_per_rupee) }}</span>
+    </div>
+
+    {% if error %}
+    <div class="alert alert-error">{{ error }}</div>
+    {% endif %}
+    {% if success %}
+    <div class="alert alert-success">{{ success }}</div>
+    {% endif %}
+
+    <form method="POST" action="{{ url_for('redeem') }}" id="redeem-form">
+
+      <p class="section-label">Select Recharge Pack</p>
+      <div class="pack-grid" id="pack-grid">
+        {% for amount, coins in redeem_packs.items() %}
+        <label class="pack-card {% if user['coins'] < coins %}pack-disabled{% endif %}"
+               id="pack-label-{{ amount }}">
+          <input type="radio" name="amount_inr" value="{{ amount }}"
+                 {% if user['coins'] < coins %}disabled{% endif %}
+                 onchange="onPackChange({{ amount }}, {{ coins }})">
+          <div class="pack-inner">
+            <div class="pack-amount">₹{{ amount }}</div>
+            <div class="pack-coins">{{ coins }} coins</div>
+            {% if user['coins'] < coins %}
+            <div class="pack-shortage">Need {{ coins - user['coins'] }} more</div>
+            {% else %}
+            <div class="pack-ok text-green">✓ Affordable</div>
+            {% endif %}
+          </div>
+        </label>
+        {% endfor %}
+      </div>
+
+      <div class="form-group" style="margin-top:1.5rem;">
+        <label for="phone">Mobile Number</label>
+        <div class="phone-input-wrap">
+          <input type="tel" id="phone" name="phone"
+                 value="{{ decode_phone(user['phone_encrypted']) }}"
+                 maxlength="10" pattern="[0-9]{10}"
+                 autocomplete="tel-national"
+                 oninput="onPhoneInput(this.value)"
+                 placeholder="10-digit mobile number" />
+          <span class="operator-badge" id="operator-badge">—</span>
+        </div>
+        <small class="field-hint">10 digits · Operator auto-detected</small>
+      </div>
+
+      <div class="coin-preview" id="coin-preview" style="display:none;">
+        <span class="preview-label">Coins required:</span>
+        <span class="preview-value text-green" id="preview-coins">0</span>
+        <span class="preview-unit">coins</span>
+      </div>
+
+      <button type="submit" class="btn btn-primary btn-full" id="redeem-btn" disabled>
+        Redeem Recharge
+      </button>
+      <p class="submit-note">Coins deducted instantly on confirmation</p>
+    </form>
+  </div>
+
+  <div class="redeem-side">
+    <div class="card info-card">
+      <h3 class="info-title">Available Packs</h3>
+      {% for amount, coins in redeem_packs.items() %}
+      <div class="pack-info-row">
+        <span class="pack-info-amount">₹{{ amount }} Recharge</span>
+        <span class="pack-info-coins">{{ coins }} coins</span>
+      </div>
+      {% endfor %}
+      <p class="info-note" style="margin-top:0.75rem;">100 coins = ₹1</p>
+    </div>
+
+    <div class="card info-card" style="margin-top:1rem;">
+      <h3 class="info-title">Your Stats</h3>
+      <div class="calc-row">
+        <span>Total Earned</span>
+        <span class="calc-val text-green">{{ user['coins'] }} coins</span>
+      </div>
+      <div class="calc-row">
+        <span>Data Saved</span>
+        <span class="calc-val">{{ user['lifetime_data_saved'] }} MB</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+{% endblock %}
+{% block scripts %}
+<script>
+const REDEEM_PACKS = {{ redeem_packs|tojson }};
+let selectedAmount = null;
+let selectedCoins  = null;
+
+function onPackChange(amount, coins) {
+  selectedAmount = amount;
+  selectedCoins  = coins;
+  document.getElementById('pack-grid').querySelectorAll('.pack-card').forEach(c => c.classList.remove('selected'));
+  const lbl = document.getElementById('pack-label-' + amount);
+  if (lbl) lbl.classList.add('selected');
+  updateRedeemPreview();
+}
+
+function onPhoneInput(val) {
+  const badge = document.getElementById('operator-badge');
+  if (val.length === 10) {
+    badge.textContent = detectOperator(val);
+    badge.className = 'operator-badge badge-detected';
+  } else {
+    badge.textContent = '—';
+    badge.className = 'operator-badge';
+  }
+  updateRedeemPreview();
+}
+
+function updateRedeemPreview() {
+  const phone = document.getElementById('phone').value;
+  const preview = document.getElementById('coin-preview');
+  const btn = document.getElementById('redeem-btn');
+  if (selectedCoins && phone.length === 10) {
+    document.getElementById('preview-coins').textContent = selectedCoins;
+    preview.style.display = 'flex';
+    btn.disabled = false;
+  } else {
+    preview.style.display = 'none';
+    btn.disabled = true;
+  }
+}
+
+function detectOperator(phone) {
+  if (/^(98|99|97|90|91|92|93|94|95|96)/.test(phone)) return 'Airtel';
+  if (/^(70|71|72|73|74|75|76|77|78|79|80|81|82|83|84|85|86|87|88|89)/.test(phone)) return 'Jio';
+  if (/^(60|61|62|63|64|65|66|67|68|69)/.test(phone)) return 'Vi';
+  return 'Unknown';
+}
+
+// Init operator badge on page load
+window.addEventListener('DOMContentLoaded', () => {
+  const phone = document.getElementById('phone');
+  if (phone && phone.value.length === 10) onPhoneInput(phone.value);
+});
+</script>
+{% endblock %}
