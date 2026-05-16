@@ -19,6 +19,14 @@ from services.auth import (
     encode_phone, decode_phone, detect_operator,
     validate_name, validate_phone, validate_password
 )
+from services.security import (
+    log_event,
+    EVENT_LOGIN_SUCCESS, EVENT_LOGIN_FAILED,
+    EVENT_AD_STARTED, EVENT_AD_COMPLETED, EVENT_AD_ABORTED,
+    EVENT_AD_DUPLICATE, EVENT_AD_TOO_FAST, EVENT_AD_DAILY_LIMIT,
+    EVENT_ADMIN_ACTION, EVENT_RATE_LIMITED, EVENT_SPAM_ATTEMPT,
+    EVENT_INVALID_TOKEN,
+)
 
 app = Flask(__name__)
 app.secret_key = os.environ.get("SESSION_SECRET", "datacure-dev-secret-2024")
@@ -34,6 +42,7 @@ FIXED_OTP           = "1234"
 REDEEM_PACKS        = {15: 1500, 20: 2000}
 TARGET_BONUS_COINS  = 20
 MAX_DATA_TARGET_MB  = 1000
+AD_DURATION_SECS    = 15
 
 
 # ── DB teardown ────────────────────────────────────────────────────────────────
@@ -202,13 +211,20 @@ def login():
         db   = get_db()
         user = db.execute("SELECT * FROM users WHERE phone_encrypted=?", (enc_phone,)).fetchone()
 
+        ip = request.remote_addr or ""
         if not user:
+            log_event(get_db(), EVENT_LOGIN_FAILED,
+                      f"Unknown phone attempted login", user_id=None, ip=ip)
             flash("No account found with this number.", "error")
             return redirect(url_for("login"), 303)
         if not check_password_hash(user["password_hash"], password):
+            log_event(get_db(), EVENT_LOGIN_FAILED,
+                      f"Wrong password for user {user['id']}", user_id=user["id"], ip=ip)
             flash("Incorrect password.", "error")
             return redirect(url_for("login"), 303)
 
+        log_event(get_db(), EVENT_LOGIN_SUCCESS,
+                  f"Login OK", user_id=user["id"], ip=ip)
         session.clear()
         session["user_id"] = user["id"]
         return redirect(url_for("dashboard"), 303)
@@ -440,17 +456,36 @@ def rewards():
         coins_per_ad=COINS_PER_AD,
         ads_today=ads_today,
         max_ads=MAX_ADS_PER_DAY,
+        ad_duration=AD_DURATION_SECS,
+        csrf_token=session.get("csrf_token", ""),
     )
+
+
+def _get_client_ip():
+    return request.headers.get("X-Forwarded-For", request.remote_addr or "")
+
+
+def _check_csrf():
+    """Validate CSRF token on AJAX requests. Returns True if valid."""
+    data = request.get_json(silent=True) or {}
+    client_csrf = (data.get("csrf_token") or
+                   request.headers.get("X-DC-CSRF", ""))
+    return bool(client_csrf and client_csrf == session.get("csrf_token"))
 
 
 @app.route("/x/ad/start", methods=["POST"])
 @login_required
 @rate_limited(is_api=True)
 def api_ad_start():
-    today = date.today().isoformat()
-    db    = get_db()
-    uid   = session["user_id"]
+    uid = session["user_id"]
+    ip  = _get_client_ip()
+    db  = get_db()
 
+    if not _check_csrf():
+        log_event(db, EVENT_SPAM_ATTEMPT, "Ad start: bad CSRF", user_id=uid, ip=ip)
+        return jsonify({"ok": False, "error": "Invalid request."}), 403
+
+    today = date.today().isoformat()
     ads_row = db.execute(
         "SELECT ads_watched FROM ad_rewards WHERE user_id=? AND reward_date=?",
         (uid, today),
@@ -458,12 +493,17 @@ def api_ad_start():
     ads_today = ads_row["ads_watched"] if ads_row else 0
 
     if ads_today >= MAX_ADS_PER_DAY:
-        return jsonify({"ok": False, "reason": "daily_limit"}), 429
+        log_event(db, EVENT_AD_DAILY_LIMIT,
+                  f"Daily limit hit ({ads_today}/{MAX_ADS_PER_DAY})",
+                  user_id=uid, ip=ip)
+        return jsonify({"ok": False, "reason": "daily_limit",
+                        "error": f"Daily limit of {MAX_ADS_PER_DAY} ads reached."}), 429
 
-    watch_token = secrets.token_hex(16)
+    watch_token = secrets.token_hex(24)
     session["ad_token"]      = watch_token
     session["ad_token_time"] = time.time()
-    return jsonify({"ok": True, "token": watch_token, "duration": 15})
+    log_event(db, EVENT_AD_STARTED, f"Ad session started", user_id=uid, ip=ip)
+    return jsonify({"ok": True, "token": watch_token, "duration": AD_DURATION_SECS})
 
 
 @app.route("/x/ad/complete", methods=["POST"])
@@ -473,20 +513,33 @@ def api_ad_complete():
     data  = request.get_json(silent=True) or {}
     token = data.get("token", "")
     uid   = session["user_id"]
+    ip    = _get_client_ip()
+    db    = get_db()
 
-    if token != session.get("ad_token"):
-        return jsonify({"ok": False, "error": "Invalid token."}), 400
+    if not _check_csrf():
+        log_event(db, EVENT_SPAM_ATTEMPT, "Ad complete: bad CSRF", user_id=uid, ip=ip)
+        return jsonify({"ok": False, "error": "Invalid request."}), 403
+
+    stored_token = session.get("ad_token")
+    if not token or not stored_token or token != stored_token:
+        log_event(db, EVENT_AD_DUPLICATE,
+                  f"Bad/duplicate token on ad complete", user_id=uid, ip=ip)
+        return jsonify({"ok": False, "error": "Invalid or expired session. Start a new ad."}), 400
 
     elapsed = time.time() - session.get("ad_token_time", 0)
-    if elapsed < 14:
-        return jsonify({"ok": False, "error": "Ad not fully watched."}), 400
+    min_elapsed = AD_DURATION_SECS - 1   # 1s grace
+    if elapsed < min_elapsed:
+        log_event(db, EVENT_AD_TOO_FAST,
+                  f"Too fast: {elapsed:.1f}s (min {min_elapsed}s)", user_id=uid, ip=ip)
+        session.pop("ad_token", None)
+        session.pop("ad_token_time", None)
+        return jsonify({"ok": False, "error": "Ad not fully watched. Please watch the complete ad."}), 400
 
+    # Consume the token immediately to prevent replay
     session.pop("ad_token", None)
     session.pop("ad_token_time", None)
 
     today = date.today().isoformat()
-    db    = get_db()
-
     ads_row = db.execute(
         "SELECT id, ads_watched FROM ad_rewards WHERE user_id=? AND reward_date=?",
         (uid, today),
@@ -494,6 +547,8 @@ def api_ad_complete():
     ads_today = ads_row["ads_watched"] if ads_row else 0
 
     if ads_today >= MAX_ADS_PER_DAY:
+        log_event(db, EVENT_AD_DAILY_LIMIT,
+                  f"Tried to complete after daily limit", user_id=uid, ip=ip)
         return jsonify({"ok": False, "error": "Daily limit reached."}), 429
 
     if ads_row:
@@ -509,13 +564,41 @@ def api_ad_complete():
 
     db.execute("UPDATE users SET total_ads_watched = total_ads_watched + 1 WHERE id=?", (uid,))
     new_balance = add_coins(db, uid, COINS_PER_AD, "Watched reward ad")
+    new_ads_today = ads_today + 1
+    remaining = max(0, MAX_ADS_PER_DAY - new_ads_today)
+
+    log_event(db, EVENT_AD_COMPLETED,
+              f"Reward granted ({elapsed:.1f}s elapsed) ads_today={new_ads_today}",
+              user_id=uid, ip=ip)
 
     return jsonify({
         "ok":          True,
         "new_coins":   COINS_PER_AD,
         "total_coins": new_balance,
-        "ads_today":   ads_today + 1,
+        "ads_today":   new_ads_today,
+        "remaining":   remaining,
     })
+
+
+@app.route("/x/ad/abort", methods=["POST"])
+@login_required
+def api_ad_abort():
+    """Called by the client when an ad is interrupted (tab hidden, page unload)."""
+    data   = request.get_json(silent=True) or {}
+    token  = data.get("token", "")
+    reason = data.get("reason", "unknown")[:64]
+    uid    = session["user_id"]
+    ip     = _get_client_ip()
+    db     = get_db()
+
+    stored = session.get("ad_token")
+    if stored and token == stored:
+        session.pop("ad_token", None)
+        session.pop("ad_token_time", None)
+        log_event(db, EVENT_AD_ABORTED,
+                  f"Ad aborted: {reason}", user_id=uid, ip=ip)
+
+    return jsonify({"ok": True})
 
 
 # ── Routes: Redeem ─────────────────────────────────────────────────────────────
@@ -658,6 +741,9 @@ def admin_request_action(req_id, action):
     status = "completed" if action == "complete" else "failed"
     db.execute("UPDATE recharge_requests SET status=? WHERE id=?", (status, req_id))
     db.commit()
+    log_event(get_db(), EVENT_ADMIN_ACTION,
+              f"Request {req_id} marked {status}",
+              user_id=session.get("user_id"), ip=_get_client_ip())
     return redirect(url_for("admin"), 303)
 
 
@@ -669,7 +755,15 @@ def inject_helpers():
             return 0
         row = get_db().execute("SELECT coins FROM users WHERE id=?", (session["user_id"],)).fetchone()
         return row["coins"] if row else 0
-    return {"get_user_coins": get_user_coins}
+
+    # Per-session CSRF token (regenerated on new session)
+    if "csrf_token" not in session:
+        session["csrf_token"] = secrets.token_hex(24)
+
+    return {
+        "get_user_coins": get_user_coins,
+        "csrf_token": session.get("csrf_token", ""),
+    }
 
 
 if __name__ == "__main__":

@@ -716,6 +716,156 @@ input::placeholder { color: var(--text-muted); }
 .target-mini-display { padding-top: 0.25rem; }
 .target-mini-val { font-size: 0.9rem; font-weight: 600; font-family: var(--mono); }
 
+/* ── Fullscreen Ad Modal ─────────────────────────────────────────────────── */
+.ad-modal-overlay {
+  position: fixed; inset: 0; z-index: 2000;
+  background: rgba(4, 4, 12, 0.96);
+  backdrop-filter: blur(16px);
+  display: flex; align-items: center; justify-content: center;
+  padding: 1rem;
+}
+.ad-modal {
+  position: relative;
+  width: 100%; max-width: 420px;
+  background: linear-gradient(160deg, #0d0d1f 0%, #0a1a12 100%);
+  border: 1px solid rgba(0,255,136,0.2);
+  border-radius: var(--radius-lg);
+  padding: 2rem 1.5rem 2rem;
+  box-shadow: 0 0 60px rgba(0,255,136,0.12), var(--shadow-lg);
+  display: flex; flex-direction: column; align-items: center;
+  gap: 0;
+  min-height: 420px; justify-content: center;
+}
+
+/* Close button */
+.ad-modal-close {
+  position: absolute; top: 0.875rem; right: 0.875rem;
+  width: 36px; height: 36px;
+  border-radius: 50%;
+  background: var(--surface2); border: 1px solid var(--border2);
+  color: var(--text-muted); font-size: 0.8rem;
+  cursor: pointer; display: flex; align-items: center; justify-content: center;
+  flex-direction: column; gap: 0; line-height: 1;
+  transition: all 0.2s;
+}
+.ad-modal-close:not(:disabled):hover { background: var(--red-glow); color: var(--red); border-color: var(--red); }
+.ad-modal-close:disabled { opacity: 0.35; cursor: not-allowed; }
+.ad-close-countdown { font-size: 0.6rem; color: var(--text-muted); line-height: 1; }
+
+/* Modal states */
+.modal-state {
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  gap: 1rem; text-align: center; width: 100%;
+}
+
+/* Loading state */
+.modal-spinner {
+  width: 48px; height: 48px; border-radius: 50%;
+  border: 3px solid rgba(0,255,136,0.15);
+  border-top-color: var(--green);
+  animation: spin 0.8s linear infinite;
+}
+.modal-state-label { font-size: 0.875rem; color: var(--text-muted); }
+
+/* Ad creative (simulated) */
+.ad-creative {
+  width: 100%;
+  background: linear-gradient(135deg, #1a0f40 0%, #0f2818 100%);
+  border: 1px solid rgba(168,85,247,0.3);
+  border-radius: var(--radius);
+  padding: 1.5rem 1.25rem;
+  display: flex; flex-direction: column; align-items: center; gap: 0.5rem;
+  position: relative; overflow: hidden;
+}
+.ad-creative::before {
+  content: '';
+  position: absolute; inset: 0;
+  background: linear-gradient(135deg,
+    rgba(168,85,247,0.05) 0%, rgba(0,255,136,0.05) 100%);
+  animation: ad-shimmer 3s ease-in-out infinite alternate;
+}
+@keyframes ad-shimmer {
+  0%   { opacity: 0.5; }
+  100% { opacity: 1; }
+}
+.ad-creative-badge {
+  position: absolute; top: 0.5rem; left: 0.5rem;
+  font-size: 0.6rem; font-weight: 700; letter-spacing: 0.1em;
+  background: rgba(255,255,255,0.1); color: rgba(255,255,255,0.5);
+  padding: 0.15rem 0.4rem; border-radius: 3px;
+}
+.ad-creative-icon { font-size: 2.5rem; filter: drop-shadow(0 0 12px var(--purple)); }
+.ad-creative-headline { font-size: 1.1rem; font-weight: 700; color: var(--text); }
+.ad-creative-sub { font-size: 0.8rem; color: var(--text-muted); }
+.ad-creative-bar {
+  width: 80%; height: 3px; border-radius: 2px;
+  background: linear-gradient(90deg, var(--green), var(--purple));
+  margin-top: 0.5rem;
+  animation: bar-pulse 2s ease-in-out infinite;
+}
+@keyframes bar-pulse {
+  0%, 100% { opacity: 0.6; transform: scaleX(0.95); }
+  50%       { opacity: 1;   transform: scaleX(1); }
+}
+
+/* Timer in modal */
+.ad-timer-wrap { display: flex; flex-direction: column; align-items: center; gap: 0.4rem; }
+.ad-timer-circle { position: relative; width: 100px; height: 100px; }
+.modal-timer-text {
+  position: absolute; inset: 0;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 1.75rem; font-weight: 800;
+  color: var(--green); font-family: var(--mono);
+}
+.modal-timer-label { font-size: 0.75rem; color: var(--text-muted); }
+
+/* Warning bar */
+.ad-modal-warning {
+  display: flex; align-items: center; justify-content: center; gap: 0.4rem;
+  background: rgba(234,179,8,0.08); border: 1px solid rgba(234,179,8,0.2);
+  border-radius: var(--radius-sm); padding: 0.5rem 0.875rem;
+  font-size: 0.75rem; color: #fde047; width: 100%;
+}
+
+/* Success state */
+.modal-success-icon { font-size: 3.5rem; filter: drop-shadow(0 0 16px var(--green)); }
+.modal-success-heading { font-size: 1.6rem; font-weight: 800; color: var(--green); }
+.modal-success-sub { font-size: 0.875rem; color: var(--text-muted); }
+.modal-success-balance {
+  font-size: 0.875rem; color: var(--text-dim);
+  background: var(--green-glow); border: 1px solid rgba(0,255,136,0.2);
+  border-radius: var(--radius-sm); padding: 0.5rem 1rem;
+}
+
+/* Error state */
+.modal-error-icon { font-size: 3rem; }
+.modal-error-heading { font-size: 1.2rem; font-weight: 700; color: var(--red); }
+.modal-error-sub { font-size: 0.875rem; color: var(--text-muted); max-width: 280px; }
+
+/* Ad info box in stats card */
+.ad-info-box {
+  margin-top: 1rem; padding-top: 1rem;
+  border-top: 1px solid var(--border);
+  display: flex; flex-direction: column; gap: 0.3rem;
+}
+.ad-info-box p { font-size: 0.78rem; color: var(--text-muted); }
+
+/* Ad icon circle */
+.ad-icon-circle {
+  width: 72px; height: 72px; border-radius: 50%;
+  background: linear-gradient(135deg, var(--green-glow), var(--purple-glow));
+  border: 2px solid var(--green);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 1.75rem;
+  box-shadow: 0 0 24px var(--green-glow);
+  animation: icon-pulse 3s ease-in-out infinite;
+}
+@keyframes icon-pulse {
+  0%, 100% { box-shadow: 0 0 24px var(--green-glow); }
+  50%       { box-shadow: 0 0 40px rgba(0,255,136,0.4); }
+}
+
 /* ── Admin ───────────────────────────────────────────────────────────────── */
 .admin-table-wrap { overflow-x: auto; border-radius: var(--radius); border: 1px solid var(--border); }
 .admin-table { width: 100%; border-collapse: collapse; font-size: 0.8rem; }

@@ -1,182 +1,382 @@
 {% extends "base.html" %}
-{% block title %}Rewards — Datacure{% endblock %}
+{% block title %}Boost Coins — Datacure{% endblock %}
 {% block content %}
 
 <div class="page-header">
-  <h1>Reward Ads</h1>
-  <p class="page-sub">Watch a 15-second ad to earn <strong class="text-green">{{ coins_per_ad }} coins</strong></p>
+  <h1>Boost Coins ⚡</h1>
+  <p class="page-sub">Watch a short ad to earn <strong class="text-green">{{ coins_per_ad }} coins</strong> instantly</p>
 </div>
 
 <div class="rewards-layout">
-  <div class="card ad-card">
-    <div class="ad-icon-wrap">
-      <div class="ad-ring" id="ad-ring"></div>
-      <div class="ad-icon">▶</div>
-    </div>
-    <h2 class="ad-title">Watch a Reward Ad</h2>
-    <p class="ad-desc">Each full ad earns you <strong class="text-green">{{ coins_per_ad }} coins</strong></p>
 
-    <div class="ad-progress-wrap">
+  <!-- ── Main Ad Card ──────────────────────────────────── -->
+  <div class="card ad-card" id="ad-card">
+
+    <!-- Daily progress bar -->
+    <div class="ad-progress-wrap" style="width:100%;margin-bottom:1.5rem;">
       <div class="ad-progress-bar">
         <div class="ad-progress-fill" id="daily-bar"
              style="width: {{ [(ads_today / max_ads) * 100, 100]|min }}%"></div>
       </div>
       <span class="ad-progress-label">
-        <span id="ads-today">{{ ads_today }}</span> / {{ max_ads }} ads watched today
+        <span id="ads-today-count">{{ ads_today }}</span> / {{ max_ads }} ads today
       </span>
     </div>
 
-    {% if ads_today >= max_ads %}
-    <div class="alert alert-warning" style="margin-top:1rem;">
-      Daily limit of {{ max_ads }} ads reached. Come back tomorrow!
-    </div>
-    <button class="btn btn-primary btn-full" disabled>Daily Limit Reached</button>
-    {% else %}
-    <div id="ad-status" class="alert" style="display:none;margin-top:0.5rem;"></div>
-    <div id="ad-timer-wrap" style="display:none;">
-      <div class="ad-timer-circle">
-        <svg viewBox="0 0 80 80">
-          <circle cx="40" cy="40" r="34" fill="none" stroke="var(--border)" stroke-width="6"/>
-          <circle id="timer-arc" cx="40" cy="40" r="34" fill="none" stroke="var(--green)"
-                  stroke-width="6" stroke-linecap="round"
-                  stroke-dasharray="213.63" stroke-dashoffset="213.63"
-                  transform="rotate(-90 40 40)"/>
-        </svg>
-        <span id="timer-text" class="timer-text">15</span>
+    <!-- Icon + title -->
+    <div class="ad-icon-wrap">
+      <div class="ad-icon-circle" id="ad-icon-circle">
+        <span class="ad-icon-emoji">▶</span>
       </div>
-      <p class="timer-label">Watching ad…</p>
     </div>
-    <button class="btn btn-primary btn-full" id="watch-btn" onclick="startAd()">
-      Watch Ad (+{{ coins_per_ad }} coins)
+    <h2 class="ad-title">Watch a Reward Ad</h2>
+    <p class="ad-desc">Each full ad earns you <strong class="text-green">+{{ coins_per_ad }} coins</strong></p>
+
+    <!-- Status message -->
+    <div id="ad-status" class="alert" style="display:none;margin-top:0.75rem;text-align:center;"></div>
+
+    <!-- Watch button / limit banner -->
+    {% if ads_today >= max_ads %}
+    <div class="alert alert-warning" style="margin-top:1rem;text-align:center;">
+      🌙 Daily limit of {{ max_ads }} ads reached. Come back tomorrow!
+    </div>
+    <button class="btn btn-primary btn-full" disabled style="margin-top:0.75rem;">Daily Limit Reached</button>
+    {% else %}
+    <button class="btn btn-primary btn-full" id="watch-btn" onclick="openAdModal()"
+            style="margin-top:1rem;">
+      ▶&nbsp; Watch Ad &nbsp;(+{{ coins_per_ad }} coins)
     </button>
+    <p class="submit-note" style="margin-top:0.5rem;">Ad must be watched fully to earn coins</p>
     {% endif %}
   </div>
 
+  <!-- ── Stats Side Card ───────────────────────────────── -->
   <div class="card stats-card">
     <h3 class="card-title">Your Ad Stats</h3>
     <div class="ad-stat-row">
       <span class="ad-stat-label">Total Ads Watched</span>
-      <span class="ad-stat-val text-green">{{ user['total_ads_watched'] }}</span>
+      <span class="ad-stat-val text-green" id="total-ads-stat">{{ user['total_ads_watched'] }}</span>
     </div>
     <div class="ad-stat-row">
       <span class="ad-stat-label">Today</span>
-      <span class="ad-stat-val">{{ ads_today }}/{{ max_ads }}</span>
+      <span class="ad-stat-val"><span id="ads-today-stat">{{ ads_today }}</span>/{{ max_ads }}</span>
     </div>
     <div class="ad-stat-row">
       <span class="ad-stat-label">Coins from Ads</span>
-      <span class="ad-stat-val text-green">{{ user['total_ads_watched'] * coins_per_ad }}</span>
+      <span class="ad-stat-val text-green" id="ad-coins-stat">{{ user['total_ads_watched'] * coins_per_ad }}</span>
     </div>
+    <div class="ad-stat-row">
+      <span class="ad-stat-label">Remaining Today</span>
+      <span class="ad-stat-val text-purple" id="remaining-stat">{{ max_ads - ads_today }}</span>
+    </div>
+
+    <div class="ad-info-box">
+      <p>⚡ Earn <strong class="text-green">{{ coins_per_ad }} coins</strong> per ad</p>
+      <p>📅 Max <strong>{{ max_ads }}</strong> ads per day</p>
+      <p>🔒 Must watch full {{ ad_duration }}s ad</p>
+      <p>🛡️ Server-verified reward</p>
+    </div>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════════════════════ -->
+<!-- FULLSCREEN AD MODAL                                      -->
+<!-- ════════════════════════════════════════════════════════ -->
+<div id="ad-modal-overlay" class="ad-modal-overlay" style="display:none;" aria-modal="true" role="dialog">
+  <div class="ad-modal">
+
+    <!-- Close button — locked during ad -->
+    <button class="ad-modal-close" id="ad-close-btn"
+            onclick="closeAdModal()" disabled aria-label="Close">
+      <span id="ad-close-icon">✕</span>
+      <span id="ad-close-countdown" class="ad-close-countdown"></span>
+    </button>
+
+    <!-- State: Loading -->
+    <div id="modal-state-loading" class="modal-state">
+      <div class="modal-spinner"></div>
+      <p class="modal-state-label">Starting ad…</p>
+    </div>
+
+    <!-- State: Watching -->
+    <div id="modal-state-watching" class="modal-state" style="display:none;">
+
+      <!-- Simulated ad creative -->
+      <div class="ad-creative">
+        <div class="ad-creative-badge">AD</div>
+        <div class="ad-creative-icon">📱</div>
+        <div class="ad-creative-headline">Top Up Your Data!</div>
+        <div class="ad-creative-sub">Save more, earn more with Datacure</div>
+        <div class="ad-creative-bar"></div>
+      </div>
+
+      <!-- Timer -->
+      <div class="ad-timer-wrap">
+        <div class="ad-timer-circle">
+          <svg viewBox="0 0 100 100" width="100" height="100">
+            <circle cx="50" cy="50" r="42" fill="none"
+                    stroke="rgba(255,255,255,0.1)" stroke-width="7"/>
+            <circle id="modal-arc" cx="50" cy="50" r="42" fill="none"
+                    stroke="var(--green)" stroke-width="7"
+                    stroke-linecap="round"
+                    stroke-dasharray="263.89"
+                    stroke-dashoffset="263.89"
+                    transform="rotate(-90 50 50)"/>
+          </svg>
+          <span id="modal-timer-text" class="modal-timer-text">{{ ad_duration }}</span>
+        </div>
+        <p class="modal-timer-label">seconds remaining</p>
+      </div>
+
+      <!-- Warning -->
+      <div class="ad-modal-warning">
+        <span>⚠️</span>
+        <span id="modal-warning-text">Do not switch tabs or navigate away</span>
+      </div>
+    </div>
+
+    <!-- State: Success -->
+    <div id="modal-state-success" class="modal-state" style="display:none;">
+      <div class="modal-success-icon">🎉</div>
+      <div class="modal-success-heading">+{{ coins_per_ad }} Coins Earned!</div>
+      <div class="modal-success-sub" id="modal-success-sub">Great job!</div>
+      <div class="modal-success-balance">
+        Balance: <strong id="modal-balance-val" class="text-green">0</strong> coins
+      </div>
+      <button class="btn btn-primary" onclick="closeAdModal()" style="margin-top:1.5rem;min-width:160px;">
+        Awesome! ✓
+      </button>
+    </div>
+
+    <!-- State: Error/Interrupted -->
+    <div id="modal-state-error" class="modal-state" style="display:none;">
+      <div class="modal-error-icon">⛔</div>
+      <div class="modal-error-heading">Ad Interrupted</div>
+      <div class="modal-error-sub" id="modal-error-msg">The ad was interrupted.</div>
+      <button class="btn btn-outline" onclick="closeAdModal()" style="margin-top:1.5rem;min-width:160px;">
+        Close
+      </button>
+    </div>
+
   </div>
 </div>
 
 {% endblock %}
 {% block scripts %}
 <script>
-const COINS_PER_AD = {{ coins_per_ad }};
-const MAX_ADS = {{ max_ads }};
-let adToken = null;
-let timerInterval = null;
+const COINS_PER_AD   = {{ coins_per_ad }};
+const MAX_ADS        = {{ max_ads }};
+const AD_DURATION    = {{ ad_duration }};
+const CSRF_TOKEN     = "{{ csrf_token }}";
 
-function startAd() {
-  const btn = document.getElementById('watch-btn');
-  const status = document.getElementById('ad-status');
-  btn.disabled = true;
-  btn.textContent = 'Starting…';
-  status.style.display = 'none';
+// ── State machine ──────────────────────────────────────────
+let adState    = 'idle';   // idle | starting | watching | completing | done | error
+let adToken    = null;
+let timerIval  = null;
+let closeIval  = null;
+let remaining  = AD_DURATION;
 
-  fetch('/x/ad/start', { method: 'POST', headers: {'Content-Type': 'application/json'} })
+// ── Open modal ─────────────────────────────────────────────
+function openAdModal() {
+  if (adState !== 'idle') return;
+  setModalState('loading');
+  showOverlay(true);
+  adState = 'starting';
+  document.getElementById('ad-close-btn').disabled = true;
+
+  fetch('/x/ad/start', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-DC-CSRF': CSRF_TOKEN },
+    body: JSON.stringify({ csrf_token: CSRF_TOKEN })
+  })
   .then(r => r.json())
   .then(data => {
     if (!data.ok) {
-      btn.disabled = false;
-      btn.textContent = 'Watch Ad (+' + COINS_PER_AD + ' coins)';
-      showAdStatus(data.reason === 'daily_limit' ? 'Daily limit reached!' : 'Error starting ad.', 'error');
+      const msg = data.reason === 'daily_limit'
+        ? 'You have reached the daily limit of ' + MAX_ADS + ' ads.'
+        : (data.error || 'Could not start ad. Please try again.');
+      showModalError(msg);
       return;
     }
-    adToken = data.token;
-    startTimer(data.duration || 15);
+    adToken   = data.token;
+    remaining = data.duration || AD_DURATION;
+    adState   = 'watching';
+    setModalState('watching');
+    startCountdown(remaining);
+    startCloseLockdown(remaining);
   })
-  .catch(() => {
-    btn.disabled = false;
-    btn.textContent = 'Watch Ad (+' + COINS_PER_AD + ' coins)';
-    showAdStatus('Network error. Try again.', 'error');
-  });
+  .catch(() => showModalError('Network error. Please check your connection.'));
 }
 
-function startTimer(duration) {
-  const timerWrap = document.getElementById('ad-timer-wrap');
-  const btn = document.getElementById('watch-btn');
-  const arc = document.getElementById('timer-arc');
-  const timerText = document.getElementById('timer-text');
-  const circumference = 213.63;
+// ── Countdown ─────────────────────────────────────────────
+function startCountdown(duration) {
+  const arc  = document.getElementById('modal-arc');
+  const txt  = document.getElementById('modal-timer-text');
+  const circ = 263.89;
+  remaining  = duration;
+  txt.textContent = remaining;
 
-  timerWrap.style.display = 'flex';
-  btn.style.display = 'none';
-
-  let remaining = duration;
-  timerText.textContent = remaining;
-
-  timerInterval = setInterval(() => {
+  timerIval = setInterval(() => {
     remaining--;
-    timerText.textContent = remaining;
+    txt.textContent = remaining;
     const progress = (duration - remaining) / duration;
-    arc.style.strokeDashoffset = circumference * (1 - progress);
+    arc.style.strokeDashoffset = circ * (1 - progress);
     if (remaining <= 0) {
-      clearInterval(timerInterval);
+      clearInterval(timerIval);
       completeAd();
     }
   }, 1000);
 }
 
+// ── Close button lockdown ──────────────────────────────────
+function startCloseLockdown(duration) {
+  const btn       = document.getElementById('ad-close-btn');
+  const cdSpan    = document.getElementById('ad-close-countdown');
+  let   left      = duration;
+  cdSpan.textContent = left + 's';
+
+  closeIval = setInterval(() => {
+    left--;
+    if (left <= 0) {
+      clearInterval(closeIval);
+      cdSpan.textContent = '';
+      // Only unlock close btn if ad finished or errored
+      if (adState !== 'watching') btn.disabled = false;
+    } else {
+      cdSpan.textContent = left + 's';
+    }
+  }, 1000);
+}
+
+// ── Complete ad ────────────────────────────────────────────
 function completeAd() {
+  if (adState !== 'watching') return;
+  adState = 'completing';
+
   fetch('/x/ad/complete', {
     method: 'POST',
-    headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({ token: adToken })
+    headers: { 'Content-Type': 'application/json', 'X-DC-CSRF': CSRF_TOKEN },
+    body: JSON.stringify({ token: adToken, csrf_token: CSRF_TOKEN })
   })
   .then(r => r.json())
   .then(data => {
-    const timerWrap = document.getElementById('ad-timer-wrap');
-    const btn = document.getElementById('watch-btn');
-    timerWrap.style.display = 'none';
-
     if (data.ok) {
-      const adsToday = data.ads_today;
-      document.getElementById('ads-today').textContent = adsToday;
-      document.getElementById('daily-bar').style.width = Math.min((adsToday / MAX_ADS) * 100, 100) + '%';
-      const topbar = document.getElementById('topbar-coins-val');
-      if (topbar) topbar.textContent = data.total_coins;
-      showAdStatus('🎉 +' + COINS_PER_AD + ' coins earned!', 'success');
-
-      if (adsToday >= MAX_ADS) {
-        btn.textContent = 'Daily Limit Reached';
-        btn.disabled = true;
-      } else {
-        btn.textContent = 'Watch Ad (+' + COINS_PER_AD + ' coins)';
-        btn.disabled = false;
-      }
-      btn.style.display = 'block';
+      adState = 'done';
+      const newAdsToday = data.ads_today;
+      updateAdStats(newAdsToday, data.total_coins);
+      document.getElementById('modal-balance-val').textContent = data.total_coins;
+      const sub = data.remaining > 0
+        ? `You have ${data.remaining} more ad${data.remaining === 1 ? '' : 's'} available today.`
+        : 'Daily limit reached. Come back tomorrow!';
+      document.getElementById('modal-success-sub').textContent = sub;
+      setModalState('success');
+      document.getElementById('ad-close-btn').disabled = false;
+      document.getElementById('ad-close-countdown').textContent = '';
+      updateCoinDisplays(data.total_coins);
+      pulseWallet();
+      showToast('+' + COINS_PER_AD + ' coins earned from ad!', 'success');
     } else {
-      btn.textContent = 'Watch Ad (+' + COINS_PER_AD + ' coins)';
-      btn.disabled = false;
-      btn.style.display = 'block';
-      showAdStatus(data.error || 'Error claiming reward.', 'error');
+      showModalError(data.error || 'Failed to claim reward. Please try again.');
     }
   })
-  .catch(() => {
-    const btn = document.getElementById('watch-btn');
-    btn.textContent = 'Watch Ad (+' + COINS_PER_AD + ' coins)';
-    btn.disabled = false;
-    btn.style.display = 'block';
-    showAdStatus('Network error.', 'error');
+  .catch(() => showModalError('Network error. Could not claim reward.'));
+}
+
+// ── Abort (tab hidden / page unload) ──────────────────────
+function abortAd(reason) {
+  if (adState !== 'watching' && adState !== 'starting') return;
+  adState = 'error';
+  clearInterval(timerIval);
+  if (adToken) {
+    navigator.sendBeacon('/x/ad/abort',
+      JSON.stringify({ token: adToken, reason, csrf_token: CSRF_TOKEN })
+    );
+  }
+}
+
+// ── Visibility change ──────────────────────────────────────
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden && (adState === 'watching' || adState === 'starting')) {
+    abortAd('tab_hidden');
+    clearInterval(timerIval);
+    clearInterval(closeIval);
+    const btn = document.getElementById('ad-close-btn');
+    if (btn) btn.disabled = false;
+    const cdSpan = document.getElementById('ad-close-countdown');
+    if (cdSpan) cdSpan.textContent = '';
+    showModalError('Ad interrupted: you switched tabs. Watch the full ad without switching.');
+  }
+});
+
+// ── Page unload (refresh / navigate away) ─────────────────
+window.addEventListener('beforeunload', () => {
+  if (adState === 'watching' || adState === 'starting') {
+    abortAd('page_unload');
+  }
+});
+
+// ── Close modal ────────────────────────────────────────────
+function closeAdModal() {
+  if (adState === 'watching') return;   // hard block
+  clearInterval(timerIval);
+  clearInterval(closeIval);
+  showOverlay(false);
+  // Reset state for next ad
+  adState   = 'idle';
+  adToken   = null;
+  remaining = AD_DURATION;
+  document.getElementById('modal-arc').style.strokeDashoffset = '263.89';
+  document.getElementById('modal-timer-text').textContent = AD_DURATION;
+  document.getElementById('ad-close-btn').disabled = true;
+  document.getElementById('ad-close-countdown').textContent = '';
+}
+
+// ── UI helpers ─────────────────────────────────────────────
+function showOverlay(show) {
+  document.getElementById('ad-modal-overlay').style.display = show ? 'flex' : 'none';
+  document.body.style.overflow = show ? 'hidden' : '';
+}
+
+function setModalState(state) {
+  ['loading','watching','success','error'].forEach(s => {
+    document.getElementById('modal-state-' + s).style.display =
+      s === state ? 'flex' : 'none';
   });
 }
 
-function showAdStatus(msg, type) {
-  const status = document.getElementById('ad-status');
-  status.textContent = msg;
-  status.className = 'alert alert-' + (type === 'success' ? 'success' : 'error');
-  status.style.display = 'block';
+function showModalError(msg) {
+  adState = 'error';
+  clearInterval(timerIval);
+  document.getElementById('modal-error-msg').textContent = msg;
+  setModalState('error');
+  document.getElementById('ad-close-btn').disabled = false;
+  document.getElementById('ad-close-countdown').textContent = '';
 }
+
+function updateAdStats(adsToday, totalCoins) {
+  const setTxt = (id, val) => { const el = document.getElementById(id); if(el) el.textContent = val; };
+  setTxt('ads-today-count', adsToday);
+  setTxt('ads-today-stat',  adsToday);
+  setTxt('remaining-stat',  Math.max(0, MAX_ADS - adsToday));
+  const totalEl = document.getElementById('total-ads-stat');
+  if (totalEl) totalEl.textContent = parseInt(totalEl.textContent || 0) + 1;
+  const adCoinsEl = document.getElementById('ad-coins-stat');
+  if (adCoinsEl) adCoinsEl.textContent = parseInt(adCoinsEl.textContent || 0) + COINS_PER_AD;
+  // Update daily bar
+  const bar = document.getElementById('daily-bar');
+  if (bar) bar.style.width = Math.min((adsToday / MAX_ADS) * 100, 100) + '%';
+  // Gray out the main watch button if limit hit
+  if (adsToday >= MAX_ADS) {
+    const btn = document.getElementById('watch-btn');
+    if (btn) { btn.textContent = 'Daily Limit Reached'; btn.disabled = true; }
+  }
+}
+
+// Keyboard: Escape key cannot close during ad
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape' && adState !== 'watching' && adState !== 'starting') {
+    closeAdModal();
+  }
+});
 </script>
 {% endblock %}

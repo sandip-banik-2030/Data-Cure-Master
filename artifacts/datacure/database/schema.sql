@@ -9,6 +9,10 @@ CREATE TABLE IF NOT EXISTS users (
     total_ads_watched INTEGER NOT NULL DEFAULT 0,
     last_active_date  TEXT,
     streak_bonus_date TEXT,
+    daily_data_target INTEGER NOT NULL DEFAULT 200,
+    today_data_saved  INTEGER NOT NULL DEFAULT 0,
+    last_data_date    TEXT,
+    target_bonus_date TEXT,
     created_at        TEXT    NOT NULL DEFAULT (datetime('now')),
     is_admin          INTEGER NOT NULL DEFAULT 0
 );
@@ -41,6 +45,17 @@ CREATE TABLE IF NOT EXISTS ad_rewards (
     ads_watched INTEGER NOT NULL DEFAULT 0
 );
 
-CREATE INDEX IF NOT EXISTS idx_transactions_user ON transactions(user_id, created_at DESC);
-CREATE INDEX IF NOT EXISTS idx_recharge_user ON recharge_requests(user_id, created_at DESC);
+CREATE TABLE IF NOT EXISTS security_logs (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id     INTEGER REFERENCES users(id),
+    event_type  TEXT    NOT NULL,
+    details     TEXT    NOT NULL DEFAULT '',
+    ip_address  TEXT    NOT NULL DEFAULT '',
+    created_at  TEXT    NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_transactions_user   ON transactions(user_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_recharge_user       ON recharge_requests(user_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_ad_rewards_user_date ON ad_rewards(user_id, reward_date);
+CREATE INDEX IF NOT EXISTS idx_security_logs_type  ON security_logs(event_type, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_security_logs_user  ON security_logs(user_id, created_at DESC);
