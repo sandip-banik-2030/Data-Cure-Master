@@ -568,6 +568,154 @@ input::placeholder { color: var(--text-muted); }
 .otp-success { color: var(--green); background: var(--green-glow); }
 .otp-error { color: var(--red); background: var(--red-glow); }
 
+/* ── Toast Notifications ─────────────────────────────────────────────────── */
+#toast-container {
+  position: fixed; top: calc(var(--top-h) + 0.75rem); left: 50%;
+  transform: translateX(-50%);
+  z-index: 9999; display: flex; flex-direction: column; gap: 0.5rem;
+  pointer-events: none; width: min(92vw, 400px);
+}
+.toast {
+  display: flex; align-items: center; gap: 0.6rem;
+  padding: 0.75rem 1rem;
+  border-radius: var(--radius-sm);
+  font-size: 0.875rem; font-weight: 500;
+  opacity: 0; transform: translateY(-12px);
+  transition: opacity 0.3s ease, transform 0.3s ease;
+  box-shadow: var(--shadow-lg);
+}
+.toast-in  { opacity: 1; transform: translateY(0); }
+.toast-out { opacity: 0; transform: translateY(-12px); }
+.toast-success { background: #0d2e1c; border: 1px solid rgba(0,255,136,0.35); color: var(--green); }
+.toast-error   { background: #2e0d0d; border: 1px solid rgba(239,68,68,0.35); color: #fca5a5; }
+.toast-info    { background: #1a1040; border: 1px solid rgba(168,85,247,0.35); color: var(--purple); }
+.toast-icon { font-size: 1rem; flex-shrink: 0; }
+.toast-msg  { flex: 1; }
+
+/* ── Wallet Card ─────────────────────────────────────────────────────────── */
+@keyframes wallet-glow-pulse {
+  0%, 100% { box-shadow: 0 0 20px rgba(0,255,136,0.15), 0 4px 24px rgba(0,0,0,0.4); }
+  50%       { box-shadow: 0 0 40px rgba(0,255,136,0.35), 0 4px 32px rgba(0,0,0,0.5); }
+}
+@keyframes wallet-pulse-once {
+  0%   { box-shadow: 0 0 20px rgba(0,255,136,0.15); }
+  40%  { box-shadow: 0 0 60px rgba(0,255,136,0.6), 0 0 0 4px rgba(0,255,136,0.1); }
+  100% { box-shadow: 0 0 20px rgba(0,255,136,0.15); }
+}
+.wallet-card {
+  position: relative; overflow: hidden;
+  background: linear-gradient(135deg, #0b1f14 0%, #0d0f1e 60%, #12082a 100%);
+  border: 1px solid rgba(0,255,136,0.25);
+  border-radius: var(--radius-lg);
+  padding: 1.5rem 1.25rem;
+  margin-bottom: 1rem;
+  animation: wallet-glow-pulse 4s ease-in-out infinite;
+}
+.wallet-card.wallet-pulse { animation: wallet-pulse-once 0.9s ease-out; }
+.wallet-glow-ring {
+  position: absolute; top: -40px; right: -40px;
+  width: 160px; height: 160px; border-radius: 50%;
+  background: radial-gradient(circle, rgba(0,255,136,0.12) 0%, transparent 70%);
+  pointer-events: none;
+}
+.wallet-inner { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
+.wallet-left  { display: flex; align-items: center; gap: 1rem; }
+.wallet-icon  { font-size: 2.5rem; filter: drop-shadow(0 0 12px var(--green)); flex-shrink: 0; }
+.wallet-label { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-muted); margin-bottom: 0.2rem; }
+.wallet-coins { font-size: 2.25rem; font-weight: 800; font-family: var(--mono); color: var(--green); line-height: 1; }
+.wallet-rupees { font-size: 0.8rem; color: var(--text-muted); margin-top: 0.2rem; }
+.wallet-right  { display: flex; flex-direction: column; align-items: flex-end; gap: 0.5rem; flex-shrink: 0; }
+.wallet-streak-badge {
+  font-size: 0.75rem; font-weight: 600; color: #f97316;
+  background: rgba(249,115,22,0.12); border: 1px solid rgba(249,115,22,0.3);
+  border-radius: 20px; padding: 0.25rem 0.6rem;
+}
+.wallet-streak-mini { text-align: center; }
+.ws-num   { display: block; font-size: 1.5rem; font-weight: 700; color: var(--text); line-height: 1; }
+.ws-label { font-size: 0.65rem; color: var(--text-muted); }
+
+/* ── Daily Target Card ───────────────────────────────────────────────────── */
+.target-card {
+  background: var(--surface);
+  border: 1px solid rgba(168,85,247,0.2);
+  border-radius: var(--radius);
+  padding: 1rem 1.25rem;
+  margin-bottom: 1rem;
+}
+.target-header {
+  display: flex; align-items: flex-start; justify-content: space-between;
+  gap: 0.75rem; margin-bottom: 0.75rem;
+}
+.target-title-wrap { display: flex; align-items: flex-start; gap: 0.6rem; }
+.target-icon { font-size: 1.25rem; flex-shrink: 0; }
+.target-title { font-size: 0.875rem; font-weight: 600; }
+.target-sub   { font-size: 0.75rem; color: var(--text-muted); margin-top: 0.15rem; }
+.target-bar-track {
+  height: 8px; background: var(--border2);
+  border-radius: 4px; overflow: hidden;
+}
+.target-bar-fill {
+  height: 100%; border-radius: 4px;
+  background: linear-gradient(90deg, var(--purple), var(--green));
+  transition: width 0.6s ease;
+}
+.target-bar-done { background: var(--green); box-shadow: 0 0 8px rgba(0,255,136,0.4); }
+.target-edit-wrap { margin-top: 1rem; padding-top: 1rem; border-top: 1px solid var(--border); }
+.target-edit-row  { display: flex; flex-direction: column; gap: 0.5rem; }
+.target-edit-val  { font-size: 1.1rem; font-weight: 700; font-family: var(--mono); color: var(--green); }
+.target-slider    { margin-top: 0.25rem; }
+.target-edit-actions { display: flex; gap: 0.5rem; margin-top: 0.75rem; }
+
+/* ── Today Progress Card (Log Data) ─────────────────────────────────────── */
+.today-progress-card {
+  background: linear-gradient(135deg, var(--surface), rgba(168,85,247,0.05));
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 1rem 1.25rem;
+  margin-bottom: 1rem;
+}
+.today-progress-header {
+  display: flex; justify-content: space-between; align-items: center;
+  margin-bottom: 0.6rem;
+}
+.today-progress-title {
+  display: flex; gap: 0.75rem; align-items: center;
+  font-size: 0.875rem; font-weight: 600;
+}
+.today-progress-vals { font-family: var(--mono); color: var(--text-muted); font-size: 0.8rem; }
+.today-progress-pct { font-size: 0.8rem; font-weight: 700; font-family: var(--mono); color: var(--purple); }
+.today-progress-note { font-size: 0.75rem; color: var(--text-muted); margin-top: 0.4rem; }
+
+/* ── Stats Grid — Today variant ─────────────────────────────────────────── */
+.stat-today::before { background: linear-gradient(90deg, var(--green), transparent); }
+.stat-today .stat-value { color: var(--green); }
+
+/* ── Button Spinner ──────────────────────────────────────────────────────── */
+@keyframes spin { to { transform: rotate(360deg); } }
+.btn-spinner {
+  width: 14px; height: 14px; border-radius: 50%;
+  border: 2px solid rgba(0,0,0,0.2);
+  border-top-color: #000;
+  animation: spin 0.7s linear infinite;
+  flex-shrink: 0;
+}
+
+/* ── Success Target Banner ───────────────────────────────────────────────── */
+.success-target-banner {
+  background: rgba(168,85,247,0.12);
+  border: 1px solid rgba(168,85,247,0.3);
+  border-radius: var(--radius-sm);
+  color: var(--purple);
+  font-size: 0.875rem; font-weight: 600;
+  padding: 0.6rem 1rem;
+  margin-top: 0.5rem;
+  text-align: center;
+}
+
+/* ── Target Mini (side panel) ────────────────────────────────────────────── */
+.target-mini-display { padding-top: 0.25rem; }
+.target-mini-val { font-size: 0.9rem; font-weight: 600; font-family: var(--mono); }
+
 /* ── Admin ───────────────────────────────────────────────────────────────── */
 .admin-table-wrap { overflow-x: auto; border-radius: var(--radius); border: 1px solid var(--border); }
 .admin-table { width: 100%; border-collapse: collapse; font-size: 0.8rem; }

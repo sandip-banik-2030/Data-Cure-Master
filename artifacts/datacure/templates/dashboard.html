@@ -2,36 +2,112 @@
 {% block title %}Dashboard — Datacure{% endblock %}
 {% block content %}
 
+<!-- Motivational greeting -->
 <div class="page-header">
   <h1>Hey, <span class="text-green">{{ user['name'] }}</span> 👋</h1>
-  <p class="page-sub">Your reward summary</p>
+  <p class="page-sub" id="motivational-msg">
+    {% if streak_info.streak == 0 %}Start your journey — every MB counts! 🚀
+    {% elif streak_info.streak < 3 %}You're warming up! Keep saving data 🔥
+    {% elif streak_info.streak < 7 %}On a {{ streak_info.streak }}-day roll! Unstoppable 💪
+    {% else %}Legend status: {{ streak_info.streak }}-day streak! 👑
+    {% endif %}
+  </p>
 </div>
 
-<!-- Stats Grid -->
-<div class="stats-grid">
-  <div class="stat-card stat-coins">
-    <div class="stat-icon">🪙</div>
-    <div class="stat-value" id="dash-coins">{{ user['coins'] }}</div>
-    <div class="stat-label">Total Coins</div>
+<!-- ── Wallet Card ─────────────────────────────────────── -->
+<div class="wallet-card" id="wallet-card">
+  <div class="wallet-glow-ring"></div>
+  <div class="wallet-inner">
+    <div class="wallet-left">
+      <div class="wallet-icon">🪙</div>
+      <div>
+        <div class="wallet-label">Datacure Coins</div>
+        <div class="wallet-coins"><span data-live="coins" id="wallet-coins-val">{{ user['coins'] }}</span></div>
+        <div class="wallet-rupees">≈ ₹<span id="live-rupees">{{ "%.2f"|format(rupees_balance) }}</span> recharge value</div>
+      </div>
+    </div>
+    <div class="wallet-right">
+      {% if streak_info.bonus_granted %}
+      <div class="wallet-streak-badge">🔥 +{{ streak_info.bonus_coins }} today</div>
+      {% endif %}
+      <div class="wallet-streak-mini">
+        <span class="ws-num">{{ streak_info.streak }}</span>
+        <span class="ws-label">day streak</span>
+      </div>
+    </div>
   </div>
-  <div class="stat-card stat-rupees">
-    <div class="stat-icon">₹</div>
-    <div class="stat-value">{{ "%.2f"|format(rupees_balance) }}</div>
-    <div class="stat-label">Recharge Value</div>
+</div>
+
+<!-- ── Stats Grid ──────────────────────────────────────── -->
+<div class="stats-grid">
+  <div class="stat-card stat-today">
+    <div class="stat-icon">📶</div>
+    <div class="stat-value" id="live-today-data">{{ today_data_saved }}</div>
+    <div class="stat-label">MB Saved Today</div>
   </div>
   <div class="stat-card stat-data">
-    <div class="stat-icon">📶</div>
-    <div class="stat-value">{{ "%.0f"|format(user['lifetime_data_saved']) }}</div>
+    <div class="stat-icon">💾</div>
+    <div class="stat-value" id="live-lifetime-data">{{ user['lifetime_data_saved'] }}</div>
     <div class="stat-label">MB Saved Total</div>
   </div>
   <div class="stat-card stat-ads">
     <div class="stat-icon">▶</div>
-    <div class="stat-value">{{ ads_today }}<span class="stat-max">/{{ max_ads }}</span></div>
+    <div class="stat-value"><span id="live-ads-today">{{ ads_today }}</span><span class="stat-max">/{{ max_ads }}</span></div>
     <div class="stat-label">Ads Today</div>
+  </div>
+  <div class="stat-card stat-rupees">
+    <div class="stat-icon">₹</div>
+    <div class="stat-value">{{ "%.0f"|format(rupees_balance) }}</div>
+    <div class="stat-label">Recharge Value</div>
   </div>
 </div>
 
-<!-- Streak Card -->
+<!-- ── Daily Target Card ───────────────────────────────── -->
+<div class="target-card">
+  <div class="target-header">
+    <div class="target-title-wrap">
+      <span class="target-icon">🎯</span>
+      <div>
+        <div class="target-title">Daily Data Target</div>
+        <div class="target-sub">
+          {% if target_pct >= 100 %}
+            <span class="text-green">🎉 Target hit! +{{ target_bonus_coins }} bonus coins earned</span>
+          {% else %}
+            <span id="target-bar-label">{{ today_data_saved }} / {{ daily_target }} MB ({{ target_pct }}%)</span>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+    <button class="btn btn-xs btn-outline" onclick="toggleTargetEdit()">Set Target</button>
+  </div>
+
+  <div class="target-bar-track">
+    <div class="target-bar-fill {% if target_pct >= 100 %}target-bar-done{% endif %}"
+         id="target-bar-fill"
+         style="width: {{ target_pct }}%"></div>
+  </div>
+
+  <!-- Inline target setter -->
+  <div class="target-edit-wrap" id="target-edit" style="display:none;">
+    <div class="target-edit-row">
+      <span class="target-edit-val" id="target-edit-disp">{{ daily_target }} MB</span>
+      <input type="range" id="target-slider" min="0" max="{{ max_data_target }}"
+             step="50" value="{{ daily_target }}"
+             class="mb-slider target-slider"
+             oninput="onTargetSlide(this.value)" />
+      <div class="slider-labels"><span>0</span><span>500</span><span>{{ max_data_target }}</span></div>
+    </div>
+    <div class="target-edit-actions">
+      <button class="btn btn-sm btn-primary" onclick="saveTarget()">Save</button>
+      <button class="btn btn-sm btn-outline" onclick="toggleTargetEdit()">Cancel</button>
+    </div>
+    <p class="field-hint" style="margin-top:0.5rem;">
+      Set to 0 to disable. Earn +{{ target_bonus_coins }} bonus coins when you hit the target each day!
+    </p>
+  </div>
+</div>
+
+<!-- ── Streak Card ─────────────────────────────────────── -->
 <div class="streak-card">
   {% if streak_info.bonus_granted %}
   <div class="streak-bonus-flash">
@@ -70,7 +146,7 @@
   </div>
 </div>
 
-<!-- Quick Actions -->
+<!-- ── Quick Actions ───────────────────────────────────── -->
 <div class="section">
   <h2 class="section-title">Quick Actions</h2>
   <div class="action-row">
@@ -92,7 +168,7 @@
   </div>
 </div>
 
-<!-- Lower Section -->
+<!-- ── Lower Section ───────────────────────────────────── -->
 <div class="lower-grid">
   <div class="card">
     <h2 class="card-title">Recent Transactions</h2>
@@ -106,6 +182,7 @@
             {% elif 'ad' in item['description']|lower %}▶
             {% elif 'Recharge' in item['description'] %}📱
             {% elif 'streak' in item['description']|lower %}🔥
+            {% elif 'target' in item['description']|lower %}🎯
             {% else %}🪙{% endif %}
           </span>
         </div>
@@ -145,4 +222,53 @@
   </div>
 </div>
 
+{% endblock %}
+{% block scripts %}
+<script>
+const MAX_TARGET = {{ max_data_target }};
+let pendingTarget = {{ daily_target }};
+
+function toggleTargetEdit() {
+  const el = document.getElementById('target-edit');
+  el.style.display = el.style.display === 'none' ? 'block' : 'none';
+}
+
+function onTargetSlide(val) {
+  pendingTarget = parseInt(val) || 0;
+  document.getElementById('target-edit-disp').textContent = pendingTarget + ' MB';
+  updateSliderFill(document.getElementById('target-slider'));
+}
+
+function updateSliderFill(slider) {
+  const pct = ((parseInt(slider.value) - parseInt(slider.min)) /
+               (parseInt(slider.max) - parseInt(slider.min))) * 100;
+  slider.style.background =
+    `linear-gradient(to right, var(--green) ${pct}%, var(--border) ${pct}%)`;
+}
+
+function saveTarget() {
+  fetch('/x/set-target', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ target: pendingTarget })
+  })
+  .then(r => r.json())
+  .then(d => {
+    if (d.success) {
+      showToast(`Daily target set to ${d.target} MB`, 'success');
+      toggleTargetEdit();
+      refreshDashboardStats();
+    } else {
+      showToast(d.error || 'Failed to save target', 'error');
+    }
+  })
+  .catch(() => showToast('Network error', 'error'));
+}
+
+// Init slider fill on load
+document.addEventListener('DOMContentLoaded', function() {
+  const s = document.getElementById('target-slider');
+  if (s) updateSliderFill(s);
+});
+</script>
 {% endblock %}

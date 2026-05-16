@@ -7,14 +7,45 @@
   <p class="page-sub">Track your savings and earn coins instantly</p>
 </div>
 
+<!-- Today's Progress Toward Target -->
+<div class="today-progress-card">
+  <div class="today-progress-header">
+    <span class="today-progress-title">
+      <span>🎯 Today's Progress</span>
+      <span class="today-progress-vals">
+        <span id="log-today-saved">{{ today_data_saved }}</span> / {{ daily_target }} MB
+      </span>
+    </span>
+    <span class="today-progress-pct {% if target_pct >= 100 %}text-green{% endif %}" id="log-target-pct">
+      {% if target_pct >= 100 %}✅ Target hit!{% else %}{{ target_pct }}%{% endif %}
+    </span>
+  </div>
+  <div class="target-bar-track">
+    <div class="target-bar-fill {% if target_pct >= 100 %}target-bar-done{% endif %}"
+         id="log-target-bar"
+         style="width: {{ target_pct }}%"></div>
+  </div>
+  {% if target_pct >= 100 %}
+  <p class="today-progress-note text-green">🎉 You've hit today's target! +{{ target_bonus_coins }} bonus coins earned.</p>
+  {% elif target_pct > 0 %}
+  <p class="today-progress-note">{{ daily_target - today_data_saved }} MB more to earn +{{ target_bonus_coins }} bonus coins!</p>
+  {% else %}
+  <p class="today-progress-note">Log data to work toward your {{ daily_target }} MB daily target!</p>
+  {% endif %}
+</div>
+
 <div class="form-page-grid">
   <div class="card form-card" id="log-card">
 
+    <!-- Success Overlay -->
     <div id="success-overlay" class="success-overlay" style="display:none;">
-      <div class="success-icon">🪙</div>
+      <div class="success-icon" id="success-icon">🪙</div>
       <div class="success-heading" id="success-heading">+0 Coins Earned!</div>
-      <div class="success-sub">Great job saving data!</div>
+      <div class="success-sub" id="success-msg">Great job saving data!</div>
       <div class="success-total">Balance: <strong id="success-total-val">0</strong> coins</div>
+      <div id="success-target-banner" class="success-target-banner" style="display:none;">
+        🎯 Daily target hit! +{{ target_bonus_coins }} bonus coins!
+      </div>
       <button class="btn btn-primary" onclick="resetForm()" style="margin-top:1.25rem;">Log More</button>
     </div>
 
@@ -44,7 +75,8 @@
       </div>
 
       <button class="btn btn-primary btn-full" id="log-btn" onclick="submitLog()" disabled>
-        Log &amp; Earn Coins
+        <span id="log-btn-text">Log &amp; Earn Coins</span>
+        <span id="log-spinner" class="btn-spinner" style="display:none;"></span>
       </button>
       <p class="submit-note">Coins calculated server-side after submission</p>
     </div>
@@ -66,10 +98,22 @@
     <div class="card info-card" style="margin-top:1rem;">
       <h3 class="info-title">Your Balance</h3>
       <div class="balance-display">
-        <span class="balance-coins text-green" id="side-balance">{{ user['coins'] }}</span>
+        <span class="balance-coins text-green" data-live="coins" id="side-balance">{{ user['coins'] }}</span>
         <span class="balance-unit">coins</span>
       </div>
       <p class="balance-sub">≈ ₹{{ "%.2f"|format(user['coins'] / 100) }}</p>
+    </div>
+
+    <div class="card info-card" style="margin-top:1rem;">
+      <h3 class="info-title">Today's Target</h3>
+      <div class="target-mini-display">
+        <div class="target-mini-val">
+          <span id="log-side-today">{{ today_data_saved }}</span> / {{ daily_target }} MB
+        </div>
+        <div class="target-bar-track" style="margin-top:0.5rem;">
+          <div class="target-bar-fill" id="log-side-bar" style="width:{{ target_pct }}%"></div>
+        </div>
+      </div>
     </div>
   </div>
 </div>
@@ -79,8 +123,19 @@
 <script>
 const COINS_PER_100MB = {{ coins_per_100mb }};
 const MB_PER_REWARD   = {{ mb_per_reward }};
+const DAILY_TARGET    = {{ daily_target }};
+const TARGET_BONUS    = {{ target_bonus_coins }};
 let submitToken       = "{{ submit_token }}";
 let submitting        = false;
+let todaySaved        = {{ today_data_saved }};
+
+const MOTIVATIONAL = [
+  "Every MB saved is a step forward! 💪",
+  "You're building great habits! 🌟",
+  "Data saver extraordinaire! 🔥",
+  "Keep it up — recharge is coming! 🚀",
+  "Smart saver, bigger rewards! 👑",
+];
 
 function updateSliderFill(slider) {
   const pct = ((parseInt(slider.value) - parseInt(slider.min)) /
@@ -111,9 +166,13 @@ function updatePreview(mb) {
   if (mb > 0 && mb <= 2000) {
     const coins = Math.floor(mb / MB_PER_REWARD) * COINS_PER_100MB;
     const leftover = mb % 100;
+    const newTotal = todaySaved + mb;
+    const willHitTarget = DAILY_TARGET > 0 && todaySaved < DAILY_TARGET && newTotal >= DAILY_TARGET;
     preview.style.display = 'flex';
     previewVal.textContent = coins;
-    note.textContent = leftover > 0 ? `(${leftover} MB remainder ignored)` : '';
+    let noteText = leftover > 0 ? `(${leftover} MB remainder ignored)` : '';
+    if (willHitTarget) noteText += (noteText ? ' · ' : '') + `🎯 +${TARGET_BONUS} target bonus!`;
+    note.textContent = noteText;
     btn.disabled = false;
   } else {
     preview.style.display = 'none';
@@ -124,14 +183,21 @@ function updatePreview(mb) {
 function submitLog() {
   if (submitting) return;
   const mb = parseInt(document.getElementById('mb_input').value);
-  const btn = document.getElementById('log-btn');
   const err = document.getElementById('error-banner');
   err.style.display = 'none';
-  if (!mb || mb < 1 || mb > 2000) { showError('Enter a value between 1 and 2000 MB.'); return; }
+
+  if (!mb || mb < 1) { showError('Enter at least 1 MB.'); return; }
+  if (mb > 2000)     { showError('Maximum is 2000 MB per submission.'); return; }
+
   submitting = true;
+  const btn = document.getElementById('log-btn');
+  const btnText = document.getElementById('log-btn-text');
+  const spinner = document.getElementById('log-spinner');
   btn.disabled = true;
-  btn.textContent = 'Logging…';
-  fetch('/api/log-data', {
+  btnText.textContent = 'Logging…';
+  spinner.style.display = 'inline-block';
+
+  fetch('/x/log-data', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ mb_saved: mb, token: submitToken })
@@ -139,24 +205,45 @@ function submitLog() {
   .then(r => r.json())
   .then(data => {
     submitting = false;
+    spinner.style.display = 'none';
     if (data.success) {
       submitToken = data.next_token;
-      showSuccess(data.new_coins, data.total_coins, mb);
+      todaySaved  = data.today_data_saved;
+      updateCoinDisplays(data.total_coins);
       document.getElementById('side-balance').textContent = data.total_coins;
-      const topbar = document.getElementById('topbar-coins-val');
-      if (topbar) topbar.textContent = data.total_coins;
+      updateProgressBars(data.today_data_saved, data.daily_target, data.target_pct);
+      showSuccess(data.new_coins, data.total_coins, mb, data.target_hit, data.target_bonus);
     } else {
       btn.disabled = false;
-      btn.textContent = 'Log & Earn Coins';
+      btnText.textContent = 'Log & Earn Coins';
       showError(data.error || 'Something went wrong.');
     }
   })
   .catch(() => {
     submitting = false;
+    spinner.style.display = 'none';
     btn.disabled = false;
-    btn.textContent = 'Log & Earn Coins';
+    btnText.textContent = 'Log & Earn Coins';
     showError('Network error. Please check your connection.');
   });
+}
+
+function updateProgressBars(saved, target, pct) {
+  const bars = ['log-target-bar', 'log-side-bar'];
+  bars.forEach(id => {
+    const el = document.getElementById(id);
+    if (el) { el.style.width = pct + '%'; if (pct >= 100) el.classList.add('target-bar-done'); }
+  });
+  const todayEl = document.getElementById('log-today-saved');
+  const sideEl  = document.getElementById('log-side-today');
+  if (todayEl) todayEl.textContent = saved;
+  if (sideEl)  sideEl.textContent  = saved;
+  const pctEl = document.getElementById('log-target-pct');
+  if (pctEl) {
+    if (pct >= 100) { pctEl.textContent = '✅ Target hit!'; pctEl.classList.add('text-green'); }
+    else            { pctEl.textContent = pct + '%'; }
+  }
+  _updateTargetBar(saved, target);
 }
 
 function showError(msg) {
@@ -165,11 +252,30 @@ function showError(msg) {
   err.style.display = 'block';
 }
 
-function showSuccess(newCoins, totalCoins, mb) {
-  document.getElementById('success-heading').textContent = `+${newCoins} Coins Earned!`;
+function showSuccess(newCoins, totalCoins, mb, targetHit, targetBonus) {
+  const icon = newCoins > 0 ? '🪙' : '📶';
+  const motivational = MOTIVATIONAL[Math.floor(Math.random() * MOTIVATIONAL.length)];
+
+  document.getElementById('success-icon').textContent = newCoins > 0 ? '🪙' : '📶';
+  document.getElementById('success-heading').textContent = newCoins > 0
+    ? `+${newCoins} Coins Earned!`
+    : `${mb} MB Logged!`;
+  document.getElementById('success-msg').textContent = motivational;
   document.getElementById('success-total-val').textContent = totalCoins;
+
+  const banner = document.getElementById('success-target-banner');
+  if (targetHit && targetBonus > 0) {
+    banner.style.display = 'block';
+    showToast(`🎯 Daily target hit! +${targetBonus} bonus coins!`, 'info', 5000);
+  } else {
+    banner.style.display = 'none';
+  }
+
+  if (newCoins > 0) showToast(`+${newCoins} coins earned for ${mb} MB saved!`, 'success');
+
   document.getElementById('success-overlay').style.display = 'flex';
   document.getElementById('log-form-wrap').style.display = 'none';
+  pulseWallet();
 }
 
 function resetForm() {
@@ -179,9 +285,14 @@ function resetForm() {
   document.getElementById('mb_slider').value = 0;
   updateSliderFill(document.getElementById('mb_slider'));
   document.getElementById('coin-preview').style.display = 'none';
-  const btn = document.getElementById('log-btn');
+  const btn     = document.getElementById('log-btn');
+  const btnText = document.getElementById('log-btn-text');
   btn.disabled = true;
-  btn.textContent = 'Log & Earn Coins';
+  btnText.textContent = 'Log & Earn Coins';
 }
+
+document.addEventListener('DOMContentLoaded', function() {
+  updateSliderFill(document.getElementById('mb_slider'));
+});
 </script>
 {% endblock %}

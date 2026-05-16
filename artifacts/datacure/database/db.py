@@ -32,10 +32,14 @@ def init_db(app):
 def _migrate(conn):
     cols = {r[1] for r in conn.execute("PRAGMA table_info(users)")}
     migrations = [
-        ("streak_bonus_date", "ALTER TABLE users ADD COLUMN streak_bonus_date TEXT"),
-        ("lifetime_data_saved", "ALTER TABLE users ADD COLUMN lifetime_data_saved INTEGER NOT NULL DEFAULT 0"),
-        ("total_ads_watched", "ALTER TABLE users ADD COLUMN total_ads_watched INTEGER NOT NULL DEFAULT 0"),
-        ("is_admin", "ALTER TABLE users ADD COLUMN is_admin INTEGER NOT NULL DEFAULT 0"),
+        ("streak_bonus_date",  "ALTER TABLE users ADD COLUMN streak_bonus_date TEXT"),
+        ("lifetime_data_saved","ALTER TABLE users ADD COLUMN lifetime_data_saved INTEGER NOT NULL DEFAULT 0"),
+        ("total_ads_watched",  "ALTER TABLE users ADD COLUMN total_ads_watched INTEGER NOT NULL DEFAULT 0"),
+        ("is_admin",           "ALTER TABLE users ADD COLUMN is_admin INTEGER NOT NULL DEFAULT 0"),
+        ("daily_data_target",  "ALTER TABLE users ADD COLUMN daily_data_target INTEGER NOT NULL DEFAULT 200"),
+        ("today_data_saved",   "ALTER TABLE users ADD COLUMN today_data_saved INTEGER NOT NULL DEFAULT 0"),
+        ("last_data_date",     "ALTER TABLE users ADD COLUMN last_data_date TEXT"),
+        ("target_bonus_date",  "ALTER TABLE users ADD COLUMN target_bonus_date TEXT"),
     ]
     for col, sql in migrations:
         if col not in cols:

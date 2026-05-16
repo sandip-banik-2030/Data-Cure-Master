@@ -25,13 +25,15 @@ app.secret_key = os.environ.get("SESSION_SECRET", "datacure-dev-secret-2024")
 app.config["SESSION_COOKIE_HTTPONLY"] = True
 app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
 
-COINS_PER_100MB  = 5
-COINS_PER_AD     = 10
-COINS_PER_RUPEE  = 100
-MAX_ADS_PER_DAY  = 15
-MB_PER_REWARD    = 100
-FIXED_OTP        = "1234"
-REDEEM_PACKS     = {15: 1500, 20: 2000}
+COINS_PER_100MB     = 5
+COINS_PER_AD        = 10
+COINS_PER_RUPEE     = 100
+MAX_ADS_PER_DAY     = 15
+MB_PER_REWARD       = 100
+FIXED_OTP           = "1234"
+REDEEM_PACKS        = {15: 1500, 20: 2000}
+TARGET_BONUS_COINS  = 20
+MAX_DATA_TARGET_MB  = 1000
 
 
 # ── DB teardown ────────────────────────────────────────────────────────────────
@@ -95,6 +97,39 @@ def get_flash_error():
         if cat == "error":
             return msg
     return None
+
+
+def _sync_today_data(db, user_id: int, today: str) -> int:
+    """Reset today_data_saved if it's a new day. Returns current today_data_saved."""
+    row = db.execute(
+        "SELECT today_data_saved, last_data_date FROM users WHERE id=?", (user_id,)
+    ).fetchone()
+    if not row:
+        return 0
+    if row["last_data_date"] != today:
+        db.execute(
+            "UPDATE users SET today_data_saved=0, last_data_date=? WHERE id=?",
+            (today, user_id),
+        )
+        db.commit()
+        return 0
+    return row["today_data_saved"] or 0
+
+
+def _check_target_bonus(db, user_id: int, today_saved: int, today: str) -> dict:
+    """Award +20 coins if daily target is hit for the first time today."""
+    row = db.execute(
+        "SELECT daily_data_target, target_bonus_date FROM users WHERE id=?", (user_id,)
+    ).fetchone()
+    target = row["daily_data_target"] or 0
+    if target <= 0 or today_saved < target:
+        return {"hit": False, "bonus": 0, "target": target}
+    if row["target_bonus_date"] == today:
+        return {"hit": True, "bonus": 0, "target": target, "already": True}
+    add_coins(db, user_id, TARGET_BONUS_COINS, f"Daily target bonus — {target} MB reached!")
+    db.execute("UPDATE users SET target_bonus_date=? WHERE id=?", (today, user_id))
+    db.commit()
+    return {"hit": True, "bonus": TARGET_BONUS_COINS, "target": target}
 
 
 # ── Routes: Root ───────────────────────────────────────────────────────────────
@@ -193,11 +228,15 @@ def logout():
 def dashboard():
     db  = get_db()
     uid = session["user_id"]
+    today = date.today().isoformat()
 
     streak_info = update_streak(db, uid)
     user = get_user(uid)
 
-    today     = date.today().isoformat()
+    # Sync today's data (resets if new day)
+    today_data_saved = _sync_today_data(db, uid, today)
+    user = get_user(uid)  # re-fetch after possible reset
+
     ads_row   = db.execute(
         "SELECT ads_watched FROM ad_rewards WHERE user_id=? AND reward_date=?",
         (uid, today),
@@ -216,6 +255,8 @@ def dashboard():
 
     coins          = get_balance(db, uid)
     rupees_balance = coins / COINS_PER_RUPEE
+    daily_target   = user["daily_data_target"] if user["daily_data_target"] else 200
+    target_pct     = min(100, round((today_data_saved / daily_target) * 100)) if daily_target > 0 else 0
 
     return render_template(
         "dashboard.html",
@@ -228,6 +269,11 @@ def dashboard():
         coins_per_rupee=COINS_PER_RUPEE,
         decode_phone=decode_phone,
         streak_info=streak_info,
+        today_data_saved=today_data_saved,
+        daily_target=daily_target,
+        target_pct=target_pct,
+        target_bonus_coins=TARGET_BONUS_COINS,
+        max_data_target=MAX_DATA_TARGET_MB,
     )
 
 
@@ -237,17 +283,28 @@ def dashboard():
 def log_data():
     token = secrets.token_hex(16)
     session["log_token"] = token
-    user = get_user(session["user_id"])
+    db  = get_db()
+    uid = session["user_id"]
+    today = date.today().isoformat()
+    today_data_saved = _sync_today_data(db, uid, today)
+    user = get_user(uid)
+    daily_target = user["daily_data_target"] if user["daily_data_target"] else 200
+    target_pct   = min(100, round((today_data_saved / daily_target) * 100)) if daily_target > 0 else 0
     return render_template(
         "log_data.html",
         coins_per_100mb=COINS_PER_100MB,
         mb_per_reward=MB_PER_REWARD,
         submit_token=token,
         user=user,
+        today_data_saved=today_data_saved,
+        daily_target=daily_target,
+        target_pct=target_pct,
+        target_bonus_coins=TARGET_BONUS_COINS,
+        max_data_target=MAX_DATA_TARGET_MB,
     )
 
 
-@app.route("/api/log-data", methods=["POST"])
+@app.route("/x/log-data", methods=["POST"])
 @login_required
 @rate_limited(is_api=True)
 def api_log_data():
@@ -265,17 +322,22 @@ def api_log_data():
     except (TypeError, ValueError):
         return jsonify({"success": False, "error": "MB value must be a whole number."}), 400
 
-    if mb_saved <= 0:
+    if mb_saved < 1:
         return jsonify({"success": False, "error": "Value must be at least 1 MB."}), 400
     if mb_saved > 2000:
         return jsonify({"success": False, "error": "Maximum is 2000 MB per submission."}), 400
 
     coins_earned = math.floor(mb_saved / 100) * COINS_PER_100MB
-    db = get_db()
+    db    = get_db()
+    today = date.today().isoformat()
+
+    # Sync and update today's data
+    today_before = _sync_today_data(db, user_id, today)
+    today_after  = today_before + mb_saved
 
     db.execute(
-        "UPDATE users SET lifetime_data_saved = lifetime_data_saved + ? WHERE id=?",
-        (mb_saved, user_id),
+        "UPDATE users SET lifetime_data_saved = lifetime_data_saved + ?, today_data_saved = ? WHERE id=?",
+        (mb_saved, today_after, user_id),
     )
 
     new_balance = get_balance(db, user_id)
@@ -284,15 +346,78 @@ def api_log_data():
     else:
         db.commit()
 
+    # Check if daily target was just hit
+    target_result = _check_target_bonus(db, user_id, today_after, today)
+    if target_result.get("bonus", 0) > 0:
+        new_balance = get_balance(db, user_id)
+
     new_token = secrets.token_hex(16)
     session["log_token"] = new_token
 
+    user = get_user(user_id)
+    daily_target = user["daily_data_target"] if user["daily_data_target"] else 200
+
     return jsonify({
-        "success":     True,
-        "new_coins":   coins_earned,
-        "total_coins": new_balance,
-        "mb_saved":    mb_saved,
-        "next_token":  new_token,
+        "success":          True,
+        "new_coins":        coins_earned,
+        "total_coins":      new_balance,
+        "mb_saved":         mb_saved,
+        "next_token":       new_token,
+        "today_data_saved": today_after,
+        "daily_target":     daily_target,
+        "target_hit":       target_result.get("hit", False),
+        "target_bonus":     target_result.get("bonus", 0),
+        "target_pct":       min(100, round((today_after / daily_target) * 100)) if daily_target > 0 else 0,
+    })
+
+
+# ── Routes: Set Daily Target ───────────────────────────────────────────────────
+@app.route("/x/set-target", methods=["POST"])
+@login_required
+def api_set_target():
+    data = request.get_json(silent=True) or {}
+    try:
+        target = int(data.get("target", 0))
+    except (TypeError, ValueError):
+        return jsonify({"success": False, "error": "Invalid target value."}), 400
+
+    if target < 0 or target > MAX_DATA_TARGET_MB:
+        return jsonify({"success": False, "error": f"Target must be 0–{MAX_DATA_TARGET_MB} MB."}), 400
+
+    db = get_db()
+    db.execute("UPDATE users SET daily_data_target=? WHERE id=?", (target, session["user_id"]))
+    db.commit()
+    return jsonify({"success": True, "target": target})
+
+
+# ── Routes: Dashboard Stats (AJAX) ─────────────────────────────────────────────
+@app.route("/x/dashboard-stats")
+@login_required
+def api_dashboard_stats():
+    db    = get_db()
+    uid   = session["user_id"]
+    today = date.today().isoformat()
+
+    today_data_saved = _sync_today_data(db, uid, today)
+    user   = get_user(uid)
+    coins  = get_balance(db, uid)
+
+    ads_row = db.execute(
+        "SELECT ads_watched FROM ad_rewards WHERE user_id=? AND reward_date=?",
+        (uid, today),
+    ).fetchone()
+    ads_today = ads_row["ads_watched"] if ads_row else 0
+    daily_target = user["daily_data_target"] if user["daily_data_target"] else 200
+
+    return jsonify({
+        "coins":              coins,
+        "rupees":             round(coins / COINS_PER_RUPEE, 2),
+        "today_data_saved":   today_data_saved,
+        "lifetime_data_saved": user["lifetime_data_saved"],
+        "streak":             user["streak"],
+        "ads_today":          ads_today,
+        "daily_data_target":  daily_target,
+        "target_pct":         min(100, round((today_data_saved / daily_target) * 100)) if daily_target > 0 else 0,
     })
 
 
@@ -318,7 +443,7 @@ def rewards():
     )
 
 
-@app.route("/api/ad/start", methods=["POST"])
+@app.route("/x/ad/start", methods=["POST"])
 @login_required
 @rate_limited(is_api=True)
 def api_ad_start():
@@ -341,7 +466,7 @@ def api_ad_start():
     return jsonify({"ok": True, "token": watch_token, "duration": 15})
 
 
-@app.route("/api/ad/complete", methods=["POST"])
+@app.route("/x/ad/complete", methods=["POST"])
 @login_required
 @rate_limited(is_api=True)
 def api_ad_complete():
@@ -386,10 +511,10 @@ def api_ad_complete():
     new_balance = add_coins(db, uid, COINS_PER_AD, "Watched reward ad")
 
     return jsonify({
-        "ok":         True,
-        "new_coins":  COINS_PER_AD,
+        "ok":          True,
+        "new_coins":   COINS_PER_AD,
         "total_coins": new_balance,
-        "ads_today":  ads_today + 1,
+        "ads_today":   ads_today + 1,
     })
 
 

@@ -84,7 +84,7 @@ function startAd() {
   btn.textContent = 'Starting…';
   status.style.display = 'none';
 
-  fetch('/api/ad/start', { method: 'POST', headers: {'Content-Type': 'application/json'} })
+  fetch('/x/ad/start', { method: 'POST', headers: {'Content-Type': 'application/json'} })
   .then(r => r.json())
   .then(data => {
     if (!data.ok) {
@@ -129,7 +129,7 @@ function startTimer(duration) {
 }
 
 function completeAd() {
-  fetch('/api/ad/complete', {
+  fetch('/x/ad/complete', {
     method: 'POST',
     headers: {'Content-Type': 'application/json'},
     body: JSON.stringify({ token: adToken })
