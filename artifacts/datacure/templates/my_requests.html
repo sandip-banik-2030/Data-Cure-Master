@@ -7,36 +7,113 @@
   <p class="page-sub">Your recharge redemption history</p>
 </div>
 
-<div class="requests-page">
-  {% if requests %}
-  <div class="requests-list">
-    {% for r in requests %}
-    <div class="request-card">
-      <div class="request-top">
-        <div class="request-pack">
-          <span class="request-icon">📱</span>
-          <div>
-            <div class="request-amount">₹{{ r['recharge_amount'] }} Recharge</div>
-            <div class="request-phone">{{ decode_phone(r['phone_number']) }} · {{ r['operator'] }}</div>
-          </div>
-        </div>
-        <span class="status-badge status-{{ r['status'] }}">{{ r['status'] }}</span>
-      </div>
-      <div class="request-bottom">
-        <span class="request-coins">-{{ r['coins_used'] }} coins</span>
-        <span class="request-date">{{ r['created_at'][:16].replace('T', ' ') }}</span>
+<!-- ── SLA Notice ───────────────────────────────────────── -->
+<div class="sla-notice-card" style="margin-bottom:1.25rem;">
+  <div class="sla-icon">⏱</div>
+  <div class="sla-body">
+    <div class="sla-title">24-Hour Processing Window</div>
+    <div class="sla-text">Requests are processed manually. Expect fulfillment within 24 hours. Contact support if a request stays Pending beyond that.</div>
+  </div>
+</div>
+
+{% if active_request %}
+<!-- ── Active request banner ─────────────────────────────── -->
+<div class="active-request-banner">
+  <div class="arb-left">
+    <span class="arb-icon">🔄</span>
+    <div>
+      <div class="arb-title">Request in Progress</div>
+      <div class="arb-desc">
+        ₹{{ active_request['recharge_amount'] }} recharge for
+        {{ decode_phone(active_request['phone_number']) }}
+        is <strong>{{ active_request['status'] | capitalize }}</strong>
       </div>
     </div>
-    {% endfor %}
   </div>
-  {% else %}
-  <div class="empty-page">
-    <div class="empty-icon">📋</div>
-    <h2>No requests yet</h2>
-    <p>Your recharge redemptions will appear here.</p>
-    <a href="{{ url_for('redeem') }}" class="btn btn-primary">Redeem Now</a>
-  </div>
-  {% endif %}
+  <span class="status-badge status-{{ active_request['status'] }}">
+    {{ active_request['status'] | capitalize }}
+  </span>
 </div>
+{% endif %}
+
+{% if requests %}
+<!-- ── Summary row ────────────────────────────────────────── -->
+<div class="req-summary-row">
+  <div class="req-summary-item">
+    <span class="rsi-val">{{ requests | length }}</span>
+    <span class="rsi-label">Total</span>
+  </div>
+  <div class="req-summary-item">
+    <span class="rsi-val text-yellow">{{ requests | selectattr('status','equalto','pending') | list | length }}</span>
+    <span class="rsi-label">Pending</span>
+  </div>
+  <div class="req-summary-item">
+    <span class="rsi-val text-blue">{{ requests | selectattr('status','equalto','processing') | list | length }}</span>
+    <span class="rsi-label">Processing</span>
+  </div>
+  <div class="req-summary-item">
+    <span class="rsi-val text-green">{{ requests | selectattr('status','equalto','completed') | list | length }}</span>
+    <span class="rsi-label">Done</span>
+  </div>
+</div>
+
+<!-- ── Request cards ──────────────────────────────────────── -->
+<div class="requests-list">
+  {% for r in requests %}
+  <div class="request-card req-status-{{ r['status'] }}">
+    <div class="request-top">
+      <div class="request-pack">
+        <div class="req-pack-icon">📱</div>
+        <div class="req-pack-details">
+          <div class="req-pack-amount">₹{{ r['recharge_amount'] }} Recharge</div>
+          <div class="req-pack-data">
+            {% if r['recharge_amount'] == 15 %}1 GB · 28 days{% elif r['recharge_amount'] == 20 %}2 GB · 28 days{% else %}Mobile Recharge{% endif %}
+          </div>
+          <div class="req-pack-meta">{{ decode_phone(r['phone_number']) }} · {{ r['operator'] }}</div>
+        </div>
+      </div>
+      <div class="req-right">
+        <span class="status-badge status-{{ r['status'] }}">
+          {% if r['status'] == 'pending' %}⏳ Pending
+          {% elif r['status'] == 'processing' %}🔄 Processing
+          {% elif r['status'] == 'completed' %}✓ Done
+          {% elif r['status'] == 'failed' %}✕ Failed
+          {% else %}{{ r['status'] | capitalize }}{% endif %}
+        </span>
+      </div>
+    </div>
+
+    <div class="request-bottom">
+      <div class="req-coins-used">
+        <span class="req-coins-icon">🪙</span>
+        <span>{{ r['coins_used'] }} coins deducted</span>
+      </div>
+      <span class="request-date">{{ r['created_at'][:16].replace('T', ' ') }}</span>
+    </div>
+
+    {% if r['status'] == 'failed' %}
+    <div class="req-failed-notice">
+      Coins refunded to your wallet for failed requests. Contact support if not received.
+    </div>
+    {% elif r['status'] == 'pending' %}
+    <div class="req-pending-notice">
+      Processing within 24 hours of submission.
+    </div>
+    {% endif %}
+  </div>
+  {% endfor %}
+</div>
+
+{% else %}
+<!-- ── Empty state ─────────────────────────────────────────── -->
+<div class="empty-page">
+  <div class="empty-icon">📋</div>
+  <h2>No requests yet</h2>
+  <p>Redeem your coins for mobile recharge and your history will appear here.</p>
+  <a href="{{ url_for('redeem') }}" class="btn btn-primary" style="margin-top:1rem;">
+    Redeem Coins →
+  </a>
+</div>
+{% endif %}
 
 {% endblock %}

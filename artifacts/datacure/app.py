@@ -40,6 +40,12 @@ MAX_ADS_PER_DAY     = 15
 MB_PER_REWARD       = 100
 FIXED_OTP           = "1234"
 REDEEM_PACKS        = {15: 1500, 20: 2000}
+RECHARGE_PACK_INFO  = {
+    15: {"coins": 1500, "data": "1 GB", "validity": "28 days"},
+    20: {"coins": 2000, "data": "2 GB", "validity": "28 days"},
+}
+OPERATORS           = ["Jio", "Airtel", "Vi", "BSNL"]
+ACTIVE_STATUSES     = ("pending", "processing")
 TARGET_BONUS_COINS  = 20
 MAX_DATA_TARGET_MB  = 1000
 AD_DURATION_SECS    = 15
@@ -609,11 +615,28 @@ def redeem():
     db  = get_db()
     uid = session["user_id"]
     user = get_user(uid)
+    ip   = _get_client_ip()
+
+    # Check for existing active request BEFORE processing POST
+    active = db.execute(
+        "SELECT * FROM recharge_requests WHERE user_id=? AND status IN ('pending','processing') LIMIT 1",
+        (uid,),
+    ).fetchone()
 
     if request.method == "POST":
+        # Block duplicate requests
+        if active:
+            flash("You already have a pending or processing request. Wait for it to be resolved.", "error")
+            log_event(db, EVENT_SPAM_ATTEMPT,
+                      f"Tried to create duplicate request while {active['status']} exists",
+                      user_id=uid, ip=ip)
+            return redirect(url_for("redeem"), 303)
+
         amount_inr = request.form.get("amount_inr", "")
         phone      = request.form.get("phone", "").strip()
+        operator   = request.form.get("operator", "").strip()
 
+        # Validate pack
         try:
             amount_inr = int(amount_inr)
         except (TypeError, ValueError):
@@ -624,52 +647,77 @@ def redeem():
             flash("Invalid pack selection.", "error")
             return redirect(url_for("redeem"), 303)
 
+        # Validate phone (exactly 10 digits)
         err = validate_phone(phone)
         if err:
             flash(err, "error")
             return redirect(url_for("redeem"), 303)
 
+        # Validate operator
+        if operator not in OPERATORS:
+            flash("Please select a valid operator.", "error")
+            return redirect(url_for("redeem"), 303)
+
         coins_required = REDEEM_PACKS[amount_inr]
+
+        # Server-side balance check (before deduct, prevents race conditions)
         balance = get_balance(db, uid)
-
         if balance < coins_required:
-            flash(f"Insufficient coins. You need {coins_required} coins.", "error")
+            flash(f"Insufficient coins. You need {coins_required} but have {balance}.", "error")
+            log_event(db, EVENT_SPAM_ATTEMPT,
+                      f"Redeem attempt with insufficient funds: {balance}<{coins_required}",
+                      user_id=uid, ip=ip)
             return redirect(url_for("redeem"), 303)
 
-        operator = detect_operator(phone)
-
+        # Deduct coins atomically via wallet service (never goes negative)
         try:
-            deduct_coins(db, uid, coins_required, f"Recharge ₹{amount_inr} to {phone}")
+            deduct_coins(db, uid, coins_required, f"Recharge ₹{amount_inr} ({operator}) to {phone}")
         except InsufficientFundsError:
-            flash("Insufficient coins.", "error")
+            flash("Insufficient coins. Please try again.", "error")
+            return redirect(url_for("redeem"), 303)
+        except WalletError as e:
+            flash(str(e), "error")
             return redirect(url_for("redeem"), 303)
 
+        # Store phone encoded, insert request
         enc_phone = encode_phone(phone)
+        pack_label = f"₹{amount_inr} — {RECHARGE_PACK_INFO[amount_inr]['data']}"
         db.execute(
             """INSERT INTO recharge_requests
                (user_id, phone_number, operator, recharge_pack, recharge_amount, coins_used, status)
                VALUES (?,?,?,?,?,?,'pending')""",
-            (uid, enc_phone, operator, f"₹{amount_inr} Recharge", amount_inr, coins_required),
+            (uid, enc_phone, operator, pack_label, amount_inr, coins_required),
         )
         db.commit()
 
-        flash(f"₹{amount_inr} recharge request submitted for {phone}!", "success")
+        log_event(db, EVENT_ADMIN_ACTION,
+                  f"Recharge request created: ₹{amount_inr} to {phone} via {operator}",
+                  user_id=uid, ip=ip)
+
+        flash(f"₹{amount_inr} recharge request submitted for {phone} ({operator}). Processing within 24 hours.", "success")
         return redirect(url_for("my_requests"), 303)
 
-    error = None
-    success = None
+    # GET — collect flash messages
+    error = success = None
     for cat, msg in get_flashed_messages(with_categories=True):
         if cat == "error":
             error = msg
         elif cat == "success":
             success = msg
 
+    # Pre-fill phone from account
+    prefill_phone = decode_phone(user["phone_encrypted"])
+
     return render_template(
         "redeem.html",
         user=user,
+        pack_info=RECHARGE_PACK_INFO,
         redeem_packs=REDEEM_PACKS,
         coins_per_rupee=COINS_PER_RUPEE,
+        operators=OPERATORS,
         decode_phone=decode_phone,
+        prefill_phone=prefill_phone,
+        blocked_request=active,
         error=error,
         success=success,
     )
@@ -688,10 +736,16 @@ def my_requests():
         (uid,),
     ).fetchall()
 
+    # Find any active (pending/processing) request for the banner
+    active_request = next(
+        (r for r in requests_list if r["status"] in ACTIVE_STATUSES), None
+    )
+
     return render_template(
         "my_requests.html",
         user=user,
         requests=requests_list,
+        active_request=active_request,
         decode_phone=decode_phone,
     )
 

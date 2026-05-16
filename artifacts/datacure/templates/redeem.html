@@ -1,95 +1,175 @@
 {% extends "base.html" %}
-{% block title %}Redeem — Datacure{% endblock %}
+{% block title %}Redeem Coins — Datacure{% endblock %}
 {% block content %}
 
 <div class="page-header">
   <h1>Redeem Coins</h1>
-  <p class="page-sub">Convert coins into mobile recharge</p>
+  <p class="page-sub">Convert your Datacure Coins into mobile recharge</p>
 </div>
 
+<!-- ── SLA Notice ────────────────────────────────────────── -->
+<div class="sla-notice-card">
+  <div class="sla-icon">⏱</div>
+  <div class="sla-body">
+    <div class="sla-title">Manual Processing — 24 Hour SLA</div>
+    <div class="sla-text">Recharge requests are reviewed and processed manually by our team within 24 hours of submission.</div>
+  </div>
+</div>
+
+<!-- ── Balance Banner ────────────────────────────────────── -->
+<div class="redeem-balance-banner">
+  <span class="rb-label">Your Balance</span>
+  <span class="rb-coins text-green" id="balance-coins">{{ user['coins'] }}</span>
+  <span class="rb-unit">coins</span>
+  <span class="rb-rupees">≈ ₹{{ "%.0f"|format(user['coins'] / coins_per_rupee) }}</span>
+</div>
+
+<!-- ── Flash messages ────────────────────────────────────── -->
+{% if error %}
+<div class="alert alert-error" style="margin-bottom:1rem;">{{ error }}</div>
+{% endif %}
+{% if success %}
+<div class="alert alert-success" style="margin-bottom:1rem;">{{ success }}</div>
+{% endif %}
+
+{% if blocked_request %}
+<!-- ── Blocked: active request exists ────────────────────── -->
+<div class="blocked-card">
+  <div class="blocked-icon">🔒</div>
+  <div class="blocked-body">
+    <div class="blocked-title">Request Already Active</div>
+    <div class="blocked-desc">
+      You have a <strong class="status-{{ blocked_request['status'] }}-text">{{ blocked_request['status'] | capitalize }}</strong>
+      request for ₹{{ blocked_request['recharge_amount'] }} submitted on
+      {{ blocked_request['created_at'][:10] }}.
+      Wait for it to be resolved before submitting a new one.
+    </div>
+    <a href="{{ url_for('my_requests') }}" class="btn btn-outline" style="margin-top:1rem;display:inline-block;">
+      View My Requests →
+    </a>
+  </div>
+</div>
+
+{% else %}
+<!-- ── Recharge Form ──────────────────────────────────────── -->
 <div class="redeem-layout">
   <div class="redeem-main">
+    <form method="POST" action="{{ url_for('redeem') }}" id="redeem-form" novalidate>
 
-    <div class="redeem-balance-banner">
-      <span class="rb-label">Your Balance</span>
-      <span class="rb-coins text-green">{{ user['coins'] }}</span>
-      <span class="rb-unit">coins</span>
-      <span class="rb-rupees">≈ ₹{{ "%.2f"|format(user['coins'] / coins_per_rupee) }}</span>
-    </div>
-
-    {% if error %}
-    <div class="alert alert-error">{{ error }}</div>
-    {% endif %}
-    {% if success %}
-    <div class="alert alert-success">{{ success }}</div>
-    {% endif %}
-
-    <form method="POST" action="{{ url_for('redeem') }}" id="redeem-form">
-
-      <p class="section-label">Select Recharge Pack</p>
+      <!-- Pack selection -->
+      <p class="section-label">Choose Recharge Pack</p>
       <div class="pack-grid" id="pack-grid">
-        {% for amount, coins in redeem_packs.items() %}
-        <label class="pack-card {% if user['coins'] < coins %}pack-disabled{% endif %}"
+        {% for amount, info in pack_info.items() %}
+        {% set affordable = user['coins'] >= info['coins'] %}
+        <label class="pack-card {% if not affordable %}pack-disabled{% endif %}"
                id="pack-label-{{ amount }}">
           <input type="radio" name="amount_inr" value="{{ amount }}"
-                 {% if user['coins'] < coins %}disabled{% endif %}
-                 onchange="onPackChange({{ amount }}, {{ coins }})">
+                 {% if not affordable %}disabled{% endif %}
+                 onchange="onPackChange({{ amount }}, {{ info['coins'] }})">
           <div class="pack-inner">
             <div class="pack-amount">₹{{ amount }}</div>
-            <div class="pack-coins">{{ coins }} coins</div>
-            {% if user['coins'] < coins %}
-            <div class="pack-shortage">Need {{ coins - user['coins'] }} more</div>
+            <div class="pack-data">{{ info['data'] }}</div>
+            <div class="pack-validity">{{ info['validity'] }}</div>
+            <div class="pack-coins-tag">{{ info['coins'] }} coins</div>
+            {% if not affordable %}
+            <div class="pack-shortage">Need {{ info['coins'] - user['coins'] }} more</div>
             {% else %}
-            <div class="pack-ok text-green">✓ Affordable</div>
+            <div class="pack-ok text-green">✓ Available</div>
             {% endif %}
           </div>
         </label>
         {% endfor %}
       </div>
 
+      <!-- Phone number -->
       <div class="form-group" style="margin-top:1.5rem;">
-        <label for="phone">Mobile Number</label>
-        <div class="phone-input-wrap">
-          <input type="tel" id="phone" name="phone"
-                 value="{{ decode_phone(user['phone_encrypted']) }}"
-                 maxlength="10" pattern="[0-9]{10}"
-                 autocomplete="tel-national"
-                 oninput="onPhoneInput(this.value)"
-                 placeholder="10-digit mobile number" />
-          <span class="operator-badge" id="operator-badge">—</span>
-        </div>
-        <small class="field-hint">10 digits · Operator auto-detected</small>
+        <label for="phone">Mobile Number to Recharge</label>
+        <input type="tel" id="phone" name="phone"
+               value="{{ prefill_phone }}"
+               maxlength="10" pattern="[0-9]{10}"
+               autocomplete="tel-national"
+               inputmode="numeric"
+               oninput="this.value=this.value.replace(/\D/g,'').slice(0,10); onPhoneInput(this.value)"
+               placeholder="10-digit mobile number" />
+        <small class="field-hint" id="phone-hint">Enter the number you want to recharge</small>
       </div>
 
+      <!-- Operator dropdown -->
+      <div class="form-group">
+        <label for="operator">Mobile Operator</label>
+        <select id="operator" name="operator" onchange="onOperatorChange(this.value)">
+          <option value="">— Select Operator —</option>
+          {% for op in operators %}
+          <option value="{{ op }}">{{ op }}</option>
+          {% endfor %}
+        </select>
+        <small class="field-hint">Select your SIM card operator</small>
+      </div>
+
+      <!-- Coin deduction preview -->
       <div class="coin-preview" id="coin-preview" style="display:none;">
-        <span class="preview-label">Coins required:</span>
-        <span class="preview-value text-green" id="preview-coins">0</span>
-        <span class="preview-unit">coins</span>
+        <div class="preview-row">
+          <span class="preview-label">Pack</span>
+          <span class="preview-value" id="preview-pack">—</span>
+        </div>
+        <div class="preview-row">
+          <span class="preview-label">Recharge to</span>
+          <span class="preview-value" id="preview-phone">—</span>
+        </div>
+        <div class="preview-row">
+          <span class="preview-label">Operator</span>
+          <span class="preview-value" id="preview-operator">—</span>
+        </div>
+        <div class="preview-divider"></div>
+        <div class="preview-row preview-total">
+          <span class="preview-label">Coins to Deduct</span>
+          <span class="preview-value text-green" id="preview-coins">—</span>
+        </div>
+        <div class="preview-row">
+          <span class="preview-label">Balance After</span>
+          <span class="preview-value" id="preview-after">—</span>
+        </div>
       </div>
 
-      <button type="submit" class="btn btn-primary btn-full" id="redeem-btn" disabled>
-        Redeem Recharge
+      <button type="submit" class="btn btn-primary btn-full" id="redeem-btn" disabled
+              style="margin-top:1rem;">
+        Confirm &amp; Redeem
       </button>
-      <p class="submit-note">Coins deducted instantly on confirmation</p>
+      <p class="submit-note">Coins are deducted immediately on confirmation</p>
     </form>
   </div>
 
+  <!-- Side panel -->
   <div class="redeem-side">
     <div class="card info-card">
-      <h3 class="info-title">Available Packs</h3>
-      {% for amount, coins in redeem_packs.items() %}
-      <div class="pack-info-row">
-        <span class="pack-info-amount">₹{{ amount }} Recharge</span>
-        <span class="pack-info-coins">{{ coins }} coins</span>
+      <h3 class="info-title">Pack Details</h3>
+      {% for amount, info in pack_info.items() %}
+      <div class="pack-detail-row">
+        <div class="pd-amount">₹{{ amount }}</div>
+        <div class="pd-meta">
+          <span class="pd-data">{{ info['data'] }}</span>
+          <span class="pd-validity">{{ info['validity'] }}</span>
+        </div>
+        <div class="pd-coins">{{ info['coins'] }}<span class="pd-coins-label"> coins</span></div>
       </div>
       {% endfor %}
-      <p class="info-note" style="margin-top:0.75rem;">100 coins = ₹1</p>
+      <p class="info-note" style="margin-top:0.75rem;">100 coins = ₹1 value</p>
     </div>
 
     <div class="card info-card" style="margin-top:1rem;">
-      <h3 class="info-title">Your Stats</h3>
+      <h3 class="info-title">Supported Operators</h3>
+      {% for op in operators %}
+      <div class="operator-row">
+        <span class="op-dot"></span>
+        <span class="op-name">{{ op }}</span>
+      </div>
+      {% endfor %}
+    </div>
+
+    <div class="card info-card" style="margin-top:1rem;">
+      <h3 class="info-title">Account</h3>
       <div class="calc-row">
-        <span>Total Earned</span>
+        <span>Balance</span>
         <span class="calc-val text-green">{{ user['coins'] }} coins</span>
       </div>
       <div class="calc-row">
@@ -99,60 +179,86 @@
     </div>
   </div>
 </div>
+{% endif %}
 
 {% endblock %}
 {% block scripts %}
 <script>
-const REDEEM_PACKS = {{ redeem_packs|tojson }};
+const USER_COINS = {{ user['coins'] }};
+const PACK_INFO  = {{ pack_info | tojson }};
 let selectedAmount = null;
 let selectedCoins  = null;
 
 function onPackChange(amount, coins) {
   selectedAmount = amount;
   selectedCoins  = coins;
-  document.getElementById('pack-grid').querySelectorAll('.pack-card').forEach(c => c.classList.remove('selected'));
+  document.querySelectorAll('.pack-card').forEach(c => c.classList.remove('selected'));
   const lbl = document.getElementById('pack-label-' + amount);
   if (lbl) lbl.classList.add('selected');
-  updateRedeemPreview();
+  refreshPreview();
 }
 
 function onPhoneInput(val) {
-  const badge = document.getElementById('operator-badge');
-  if (val.length === 10) {
-    badge.textContent = detectOperator(val);
-    badge.className = 'operator-badge badge-detected';
+  const hint = document.getElementById('phone-hint');
+  if (val.length > 0 && val.length < 10) {
+    hint.textContent = (10 - val.length) + ' more digits needed';
+    hint.style.color = 'var(--red)';
+  } else if (val.length === 10) {
+    hint.textContent = '✓ Valid number';
+    hint.style.color = 'var(--green)';
   } else {
-    badge.textContent = '—';
-    badge.className = 'operator-badge';
+    hint.textContent = 'Enter the number you want to recharge';
+    hint.style.color = '';
   }
-  updateRedeemPreview();
+  refreshPreview();
 }
 
-function updateRedeemPreview() {
-  const phone = document.getElementById('phone').value;
-  const preview = document.getElementById('coin-preview');
-  const btn = document.getElementById('redeem-btn');
-  if (selectedCoins && phone.length === 10) {
-    document.getElementById('preview-coins').textContent = selectedCoins;
-    preview.style.display = 'flex';
-    btn.disabled = false;
+function onOperatorChange(val) {
+  document.getElementById('preview-operator').textContent = val || '—';
+  refreshPreview();
+}
+
+function refreshPreview() {
+  const phone    = document.getElementById('phone').value;
+  const operator = document.getElementById('operator').value;
+  const preview  = document.getElementById('coin-preview');
+  const btn      = document.getElementById('redeem-btn');
+
+  const ready = selectedCoins && phone.length === 10 && operator;
+  btn.disabled = !ready;
+
+  if (ready) {
+    const pack = PACK_INFO[selectedAmount];
+    document.getElementById('preview-pack').textContent =
+      '₹' + selectedAmount + ' — ' + pack.data;
+    document.getElementById('preview-phone').textContent = phone;
+    document.getElementById('preview-operator').textContent = operator;
+    document.getElementById('preview-coins').textContent = selectedCoins + ' coins';
+    const afterBal = USER_COINS - selectedCoins;
+    document.getElementById('preview-after').textContent = afterBal + ' coins';
+    preview.style.display = 'block';
   } else {
     preview.style.display = 'none';
-    btn.disabled = true;
   }
 }
 
-function detectOperator(phone) {
-  if (/^(98|99|97|90|91|92|93|94|95|96)/.test(phone)) return 'Airtel';
-  if (/^(70|71|72|73|74|75|76|77|78|79|80|81|82|83|84|85|86|87|88|89)/.test(phone)) return 'Jio';
-  if (/^(60|61|62|63|64|65|66|67|68|69)/.test(phone)) return 'Vi';
-  return 'Unknown';
-}
-
-// Init operator badge on page load
-window.addEventListener('DOMContentLoaded', () => {
-  const phone = document.getElementById('phone');
-  if (phone && phone.value.length === 10) onPhoneInput(phone.value);
+// Confirm before submit
+document.getElementById('redeem-form')?.addEventListener('submit', function(e) {
+  const phone    = document.getElementById('phone').value;
+  const operator = document.getElementById('operator').value;
+  if (!selectedAmount || phone.length !== 10 || !operator) {
+    e.preventDefault(); return;
+  }
+  const pack = PACK_INFO[selectedAmount];
+  const ok = confirm(
+    `Confirm recharge request?\n\n` +
+    `Pack:     ₹${selectedAmount} (${pack.data})\n` +
+    `Number:   ${phone}\n` +
+    `Operator: ${operator}\n` +
+    `Coins:    ${selectedCoins} deducted immediately\n\n` +
+    `Processing takes up to 24 hours.`
+  );
+  if (!ok) e.preventDefault();
 });
 </script>
 {% endblock %}
