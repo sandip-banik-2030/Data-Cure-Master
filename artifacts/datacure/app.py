@@ -757,31 +757,44 @@ def admin():
     db = get_db()
 
     users_list = db.execute(
-        "SELECT id, name, phone_encrypted, coins, lifetime_data_saved, streak, total_ads_watched, created_at, is_admin FROM users ORDER BY created_at DESC"
+        """SELECT id, name, phone_encrypted, coins, lifetime_data_saved,
+                  streak, total_ads_watched, created_at, is_admin
+           FROM users ORDER BY created_at DESC"""
     ).fetchall()
 
-    pending_requests = db.execute(
-        """SELECT r.*, u.name as user_name
+    all_requests = db.execute(
+        """SELECT r.*, u.name AS user_name
            FROM recharge_requests r
            JOIN users u ON u.id = r.user_id
-           WHERE r.status = 'pending'
            ORDER BY r.created_at DESC"""
     ).fetchall()
 
     stats = db.execute(
         """SELECT
-           COUNT(*) as total_users,
-           SUM(coins) as total_coins,
-           SUM(lifetime_data_saved) as total_data_mb,
-           SUM(total_ads_watched) as total_ads
+               COUNT(*)                        AS total_users,
+               COALESCE(SUM(coins), 0)         AS total_coins,
+               COALESCE(SUM(lifetime_data_saved), 0) AS total_data_mb,
+               COALESCE(SUM(total_ads_watched), 0)   AS total_ads
            FROM users"""
+    ).fetchone()
+
+    req_stats = db.execute(
+        """SELECT
+               COUNT(*) AS total,
+               COALESCE(SUM(CASE WHEN status='pending'    THEN 1 ELSE 0 END), 0) AS pending,
+               COALESCE(SUM(CASE WHEN status='processing' THEN 1 ELSE 0 END), 0) AS processing,
+               COALESCE(SUM(CASE WHEN status='completed'  THEN 1 ELSE 0 END), 0) AS completed,
+               COALESCE(SUM(CASE WHEN status='failed'     THEN 1 ELSE 0 END), 0) AS failed,
+               COALESCE(SUM(coins_used), 0) AS total_coins_redeemed
+           FROM recharge_requests"""
     ).fetchone()
 
     return render_template(
         "admin.html",
         users=users_list,
-        pending_requests=pending_requests,
+        all_requests=all_requests,
         stats=stats,
+        req_stats=req_stats,
         decode_phone=decode_phone,
     )
 
@@ -789,16 +802,76 @@ def admin():
 @app.route("/admin/request/<int:req_id>/<action>", methods=["POST"])
 @admin_required
 def admin_request_action(req_id, action):
-    if action not in ("complete", "fail"):
+    if action not in ("complete", "fail", "processing"):
         return redirect(url_for("admin"), 303)
     db = get_db()
-    status = "completed" if action == "complete" else "failed"
+    status = {"complete": "completed", "fail": "failed", "processing": "processing"}[action]
     db.execute("UPDATE recharge_requests SET status=? WHERE id=?", (status, req_id))
     db.commit()
-    log_event(get_db(), EVENT_ADMIN_ACTION,
+    log_event(db, EVENT_ADMIN_ACTION,
               f"Request {req_id} marked {status}",
               user_id=session.get("user_id"), ip=_get_client_ip())
     return redirect(url_for("admin"), 303)
+
+
+@app.route("/x/admin/status", methods=["POST"])
+@admin_required
+def admin_status_ajax():
+    """AJAX status update — returns JSON so the admin page updates without reload."""
+    data       = request.get_json(silent=True) or {}
+    req_id     = data.get("req_id")
+    new_status = data.get("status", "")
+    valid      = ("pending", "processing", "completed", "failed")
+    if not req_id or new_status not in valid:
+        return jsonify({"ok": False, "error": "Invalid parameters"}), 400
+    db = get_db()
+    row = db.execute("SELECT id FROM recharge_requests WHERE id=?", (req_id,)).fetchone()
+    if not row:
+        return jsonify({"ok": False, "error": "Request not found"}), 404
+    db.execute("UPDATE recharge_requests SET status=? WHERE id=?", (new_status, req_id))
+    db.commit()
+    log_event(db, EVENT_ADMIN_ACTION,
+              f"AJAX status update: #{req_id} → {new_status}",
+              user_id=session.get("user_id"), ip=_get_client_ip())
+    return jsonify({"ok": True, "req_id": req_id, "status": new_status})
+
+
+@app.route("/admin/export/pending.csv")
+@admin_required
+def admin_export_pending():
+    """Download pending requests as CSV — filename includes today's date."""
+    import csv, io
+    db   = get_db()
+    rows = db.execute(
+        """SELECT r.id, u.name AS user_name, r.phone_number, r.operator,
+                  r.recharge_pack, r.recharge_amount, r.coins_used, r.created_at
+           FROM recharge_requests r
+           JOIN users u ON u.id = r.user_id
+           WHERE r.status = 'pending'
+           ORDER BY r.created_at DESC"""
+    ).fetchall()
+
+    buf = io.StringIO()
+    w   = csv.writer(buf)
+    w.writerow(["ID", "User", "Phone", "Operator", "Pack", "Amount (INR)", "Coins Used", "Submitted At"])
+    for r in rows:
+        w.writerow([
+            r["id"],
+            r["user_name"],
+            decode_phone(r["phone_number"]),
+            r["operator"],
+            r["recharge_pack"],
+            r["recharge_amount"],
+            r["coins_used"],
+            r["created_at"][:16].replace("T", " "),
+        ])
+
+    filename = f"pending_requests_{date.today().isoformat().replace('-', '_')}.csv"
+    return app.response_class(
+        buf.getvalue(),
+        mimetype="text/csv",
+        headers={"Content-Disposition": f"attachment; filename={filename}"},
+    )
 
 
 # ── Template context helpers ───────────────────────────────────────────────────

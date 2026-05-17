@@ -1,42 +1,94 @@
 {% extends "base.html" %}
-{% block title %}Admin — Datacure{% endblock %}
+{% block title %}Admin Panel — Datacure{% endblock %}
 {% block content %}
 
 <div class="page-header">
-  <h1>⚙ Admin Panel</h1>
-  <p class="page-sub">Manage users and recharge requests</p>
+  <div>
+    <h1>⚙ Admin Panel</h1>
+    <p class="page-sub">Datacure platform management</p>
+  </div>
+  <a href="{{ url_for('admin_export_pending') }}" class="btn btn-outline btn-sm" id="csv-export-btn">
+    ↓ Download Pending CSV
+  </a>
 </div>
 
-<!-- Platform Stats -->
-<div class="stats-grid">
-  <div class="stat-card">
-    <div class="stat-icon">👥</div>
-    <div class="stat-value">{{ stats['total_users'] or 0 }}</div>
-    <div class="stat-label">Total Users</div>
+<!-- ── Platform Stats ────────────────────────────────────── -->
+<div class="admin-stats-grid">
+  <div class="admin-stat-card">
+    <div class="asc-icon">👥</div>
+    <div class="asc-val">{{ stats['total_users'] or 0 }}</div>
+    <div class="asc-label">Total Users</div>
   </div>
-  <div class="stat-card">
-    <div class="stat-icon">🪙</div>
-    <div class="stat-value">{{ stats['total_coins'] or 0 }}</div>
-    <div class="stat-label">Coins in Circulation</div>
+  <div class="admin-stat-card">
+    <div class="asc-icon">🪙</div>
+    <div class="asc-val text-green">{{ stats['total_coins'] or 0 }}</div>
+    <div class="asc-label">Coins in Circulation</div>
   </div>
-  <div class="stat-card">
-    <div class="stat-icon">📶</div>
-    <div class="stat-value">{{ stats['total_data_mb'] or 0 }}</div>
-    <div class="stat-label">MB Logged</div>
+  <div class="admin-stat-card">
+    <div class="asc-icon">📶</div>
+    <div class="asc-val">{{ stats['total_data_mb'] or 0 }}</div>
+    <div class="asc-label">MB Logged</div>
   </div>
-  <div class="stat-card">
-    <div class="stat-icon">▶</div>
-    <div class="stat-value">{{ stats['total_ads'] or 0 }}</div>
-    <div class="stat-label">Ads Watched</div>
+  <div class="admin-stat-card">
+    <div class="asc-icon">▶</div>
+    <div class="asc-val">{{ stats['total_ads'] or 0 }}</div>
+    <div class="asc-label">Ads Watched</div>
   </div>
 </div>
 
-<!-- Pending Requests -->
-<div class="section">
-  <h2 class="section-title">Pending Recharge Requests</h2>
-  {% if pending_requests %}
+<!-- ── Request Stats Row ──────────────────────────────────── -->
+<div class="req-stats-row">
+  <div class="rsr-item">
+    <span class="rsr-val">{{ req_stats['total'] }}</span>
+    <span class="rsr-label">Total Requests</span>
+  </div>
+  <div class="rsr-item rsr-pending">
+    <span class="rsr-val text-yellow">{{ req_stats['pending'] }}</span>
+    <span class="rsr-label">Pending</span>
+  </div>
+  <div class="rsr-item rsr-processing">
+    <span class="rsr-val text-blue">{{ req_stats['processing'] }}</span>
+    <span class="rsr-label">Processing</span>
+  </div>
+  <div class="rsr-item rsr-completed">
+    <span class="rsr-val text-green">{{ req_stats['completed'] }}</span>
+    <span class="rsr-label">Completed</span>
+  </div>
+  <div class="rsr-item rsr-failed">
+    <span class="rsr-val" style="color:#fca5a5;">{{ req_stats['failed'] }}</span>
+    <span class="rsr-label">Failed</span>
+  </div>
+  <div class="rsr-item">
+    <span class="rsr-val text-purple">{{ req_stats['total_coins_redeemed'] }}</span>
+    <span class="rsr-label">Coins Redeemed</span>
+  </div>
+</div>
+
+<!-- ── Recharge Requests ──────────────────────────────────── -->
+<div class="admin-section">
+  <div class="admin-section-header">
+    <h2 class="section-title">Recharge Requests</h2>
+    <div class="admin-toolbar">
+      <input type="text" id="req-search" class="admin-search"
+             placeholder="Search user, phone, operator…"
+             oninput="filterRequests()">
+      <select id="req-status-filter" onchange="filterRequests()" class="admin-filter-select">
+        <option value="">All Statuses</option>
+        <option value="pending">Pending</option>
+        <option value="processing">Processing</option>
+        <option value="completed">Completed</option>
+        <option value="failed">Failed</option>
+      </select>
+    </div>
+  </div>
+
+  <div id="req-empty-state" class="empty-filter-msg" style="display:none;">
+    No requests match your filter.
+  </div>
+
+  {% if all_requests %}
   <div class="admin-table-wrap">
-    <table class="admin-table">
+    <table class="admin-table" id="req-table">
       <thead>
         <tr>
           <th>#</th>
@@ -44,29 +96,36 @@
           <th>Phone</th>
           <th>Operator</th>
           <th>Pack</th>
-          <th>Coins Used</th>
-          <th>Date</th>
-          <th>Action</th>
+          <th>Coins</th>
+          <th>Submitted</th>
+          <th>Status</th>
         </tr>
       </thead>
-      <tbody>
-        {% for r in pending_requests %}
-        <tr>
-          <td>{{ r['id'] }}</td>
+      <tbody id="req-tbody">
+        {% for r in all_requests %}
+        <tr class="req-row" id="req-row-{{ r['id'] }}"
+            data-user="{{ r['user_name'] | lower }}"
+            data-phone="{{ decode_phone(r['phone_number']) }}"
+            data-operator="{{ r['operator'] | lower }}"
+            data-status="{{ r['status'] }}">
+          <td class="mono-sm">{{ r['id'] }}</td>
           <td>{{ r['user_name'] }}</td>
-          <td>{{ decode_phone(r['phone_number']) }}</td>
+          <td class="mono-sm">{{ decode_phone(r['phone_number']) }}</td>
           <td>{{ r['operator'] }}</td>
-          <td>₹{{ r['recharge_amount'] }}</td>
-          <td class="text-green">{{ r['coins_used'] }}</td>
-          <td>{{ r['created_at'][:10] }}</td>
+          <td>{{ r['recharge_pack'] }}</td>
+          <td class="text-green mono-sm">{{ r['coins_used'] }}</td>
+          <td class="mono-sm">{{ r['created_at'][:16].replace('T', ' ') }}</td>
           <td>
-            <div class="admin-actions">
-              <form method="POST" action="{{ url_for('admin_request_action', req_id=r['id'], action='complete') }}" style="display:inline;">
-                <button type="submit" class="btn btn-xs btn-success">Complete</button>
-              </form>
-              <form method="POST" action="{{ url_for('admin_request_action', req_id=r['id'], action='fail') }}" style="display:inline;">
-                <button type="submit" class="btn btn-xs btn-danger">Fail</button>
-              </form>
+            <div class="status-update-wrap">
+              <select class="status-select" id="sel-{{ r['id'] }}"
+                      onchange="updateStatus({{ r['id'] }}, this)"
+                      data-original="{{ r['status'] }}">
+                <option value="pending"    {% if r['status']=='pending'    %}selected{% endif %}>⏳ Pending</option>
+                <option value="processing" {% if r['status']=='processing' %}selected{% endif %}>🔄 Processing</option>
+                <option value="completed"  {% if r['status']=='completed'  %}selected{% endif %}>✓ Completed</option>
+                <option value="failed"     {% if r['status']=='failed'     %}selected{% endif %}>✕ Failed</option>
+              </select>
+              <span class="status-save-indicator" id="ind-{{ r['id'] }}"></span>
             </div>
           </td>
         </tr>
@@ -75,21 +134,33 @@
     </table>
   </div>
   {% else %}
-  <p class="empty-state">No pending requests.</p>
+  <p class="empty-state">No recharge requests yet.</p>
   {% endif %}
 </div>
 
-<!-- Users List -->
-<div class="section">
-  <h2 class="section-title">All Users</h2>
+<!-- ── Users Table ────────────────────────────────────────── -->
+<div class="admin-section" style="margin-top:2rem;">
+  <div class="admin-section-header">
+    <h2 class="section-title">All Users</h2>
+    <div class="admin-toolbar">
+      <input type="text" id="user-search" class="admin-search"
+             placeholder="Search name or phone…"
+             oninput="filterUsers()">
+    </div>
+  </div>
+
+  <div id="user-empty-state" class="empty-filter-msg" style="display:none;">
+    No users match your search.
+  </div>
+
   <div class="admin-table-wrap">
-    <table class="admin-table">
+    <table class="admin-table" id="user-table">
       <thead>
         <tr>
           <th>#</th>
           <th>Name</th>
           <th>Phone</th>
-          <th>Coins</th>
+          <th>Balance</th>
           <th>Data Saved</th>
           <th>Streak</th>
           <th>Ads</th>
@@ -97,18 +168,23 @@
           <th>Joined</th>
         </tr>
       </thead>
-      <tbody>
+      <tbody id="user-tbody">
         {% for u in users %}
-        <tr>
-          <td>{{ u['id'] }}</td>
-          <td>{{ u['name'] }}</td>
-          <td>{{ decode_phone(u['phone_encrypted']) }}</td>
-          <td class="text-green">{{ u['coins'] }}</td>
-          <td>{{ u['lifetime_data_saved'] }} MB</td>
+        <tr class="user-row"
+            data-name="{{ u['name'] | lower }}"
+            data-phone="{{ decode_phone(u['phone_encrypted']) }}">
+          <td class="mono-sm">{{ u['id'] }}</td>
+          <td>
+            {{ u['name'] }}
+            {% if u['is_admin'] %}<span class="admin-crown">👑</span>{% endif %}
+          </td>
+          <td class="mono-sm">{{ decode_phone(u['phone_encrypted']) }}</td>
+          <td><span class="text-green mono-sm">{{ u['coins'] }}</span> <span class="dim-unit">coins</span></td>
+          <td class="mono-sm">{{ u['lifetime_data_saved'] }} MB</td>
           <td>🔥 {{ u['streak'] }}</td>
-          <td>{{ u['total_ads_watched'] }}</td>
-          <td>{% if u['is_admin'] %}<span class="text-green">✓</span>{% else %}—{% endif %}</td>
-          <td>{{ u['created_at'][:10] }}</td>
+          <td class="mono-sm">{{ u['total_ads_watched'] }}</td>
+          <td>{% if u['is_admin'] %}<span class="text-green">Yes</span>{% else %}<span class="text-muted">—</span>{% endif %}</td>
+          <td class="mono-sm">{{ u['created_at'][:10] }}</td>
         </tr>
         {% endfor %}
       </tbody>
@@ -116,4 +192,104 @@
   </div>
 </div>
 
+<!-- ── Toast for status updates ──────────────────────────── -->
+<div id="admin-toast" class="admin-toast" style="display:none;"></div>
+
+{% endblock %}
+{% block scripts %}
+<script>
+// ── Request filter ──────────────────────────────────────────
+function filterRequests() {
+  const q      = document.getElementById('req-search').value.toLowerCase().trim();
+  const status = document.getElementById('req-status-filter').value;
+  let   shown  = 0;
+  document.querySelectorAll('#req-tbody .req-row').forEach(row => {
+    const matchText = !q ||
+      row.dataset.user.includes(q) ||
+      row.dataset.phone.includes(q) ||
+      row.dataset.operator.includes(q);
+    const matchStatus = !status || row.dataset.status === status;
+    const visible = matchText && matchStatus;
+    row.style.display = visible ? '' : 'none';
+    if (visible) shown++;
+  });
+  document.getElementById('req-empty-state').style.display = shown === 0 ? 'block' : 'none';
+}
+
+// ── User filter ─────────────────────────────────────────────
+function filterUsers() {
+  const q     = document.getElementById('user-search').value.toLowerCase().trim();
+  let   shown = 0;
+  document.querySelectorAll('#user-tbody .user-row').forEach(row => {
+    const visible = !q || row.dataset.name.includes(q) || row.dataset.phone.includes(q);
+    row.style.display = visible ? '' : 'none';
+    if (visible) shown++;
+  });
+  document.getElementById('user-empty-state').style.display = shown === 0 ? 'block' : 'none';
+}
+
+// ── AJAX status update ──────────────────────────────────────
+function updateStatus(reqId, selectEl) {
+  const newStatus = selectEl.value;
+  const ind       = document.getElementById('ind-' + reqId);
+  const row       = document.getElementById('req-row-' + reqId);
+
+  ind.textContent = '…';
+  ind.className   = 'status-save-indicator saving';
+  selectEl.disabled = true;
+
+  fetch('/x/admin/status', {
+    method:  'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body:    JSON.stringify({ req_id: reqId, status: newStatus }),
+  })
+  .then(r => r.json())
+  .then(data => {
+    selectEl.disabled = false;
+    if (data.ok) {
+      ind.textContent = '✓';
+      ind.className   = 'status-save-indicator saved';
+      selectEl.dataset.original = newStatus;
+      // Update data-status for filter
+      row.dataset.status = newStatus;
+      // Re-apply filter in case active filter hides this row
+      filterRequests();
+      showAdminToast('Request #' + reqId + ' → ' + newStatus, 'success');
+      setTimeout(() => { ind.textContent = ''; ind.className = 'status-save-indicator'; }, 3000);
+    } else {
+      ind.textContent = '✕';
+      ind.className   = 'status-save-indicator error';
+      selectEl.value  = selectEl.dataset.original;
+      showAdminToast('Update failed: ' + (data.error || 'Unknown error'), 'error');
+    }
+  })
+  .catch(() => {
+    selectEl.disabled = false;
+    selectEl.value    = selectEl.dataset.original;
+    ind.textContent   = '✕';
+    ind.className     = 'status-save-indicator error';
+    showAdminToast('Network error. Try again.', 'error');
+  });
+}
+
+// ── Admin toast ─────────────────────────────────────────────
+function showAdminToast(msg, type) {
+  const t = document.getElementById('admin-toast');
+  t.textContent = msg;
+  t.className   = 'admin-toast admin-toast-' + type;
+  t.style.display = 'block';
+  clearTimeout(t._timer);
+  t._timer = setTimeout(() => { t.style.display = 'none'; }, 3500);
+}
+
+// Highlight CSV export button if pending > 0
+const pendingCount = {{ req_stats['pending'] }};
+if (pendingCount > 0) {
+  const btn = document.getElementById('csv-export-btn');
+  if (btn) {
+    btn.innerHTML = '↓ Download Pending CSV <span class="csv-badge">' + pendingCount + '</span>';
+    btn.classList.add('btn-export-active');
+  }
+}
+</script>
 {% endblock %}
