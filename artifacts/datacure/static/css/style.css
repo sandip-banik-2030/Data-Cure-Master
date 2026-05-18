@@ -1151,3 +1151,392 @@ select option { background: #0d0d1a; }
 .btn-sm { padding: 0.4rem 0.875rem; font-size: 0.8rem; }
 
 .admin-actions { display: flex; gap: 0.4rem; }
+
+/* ══════════════════════════════════════════════════════════════════════════
+   PREMIUM UI UPGRADE v2 — Animations, Mobile, Polish
+   ══════════════════════════════════════════════════════════════════════════ */
+
+/* ── Page Transition ─────────────────────────────────────────────────────── */
+@keyframes pageFadeUp {
+  from { opacity: 0; transform: translateY(10px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+#main-content.page-entering {
+  opacity: 0; transform: translateY(8px);
+  transition: opacity 0.22s ease, transform 0.22s ease;
+}
+#main-content.page-entered {
+  opacity: 1; transform: translateY(0);
+}
+
+/* ── Staggered Card Animations ───────────────────────────────────────────── */
+@keyframes cardSlideUp {
+  from { opacity: 0; transform: translateY(16px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.card, .wallet-card, .streak-card, .target-card,
+.request-card, .sla-notice-card, .today-progress-card {
+  opacity: 0;
+  transform: translateY(12px);
+  transition: opacity 0.35s ease, transform 0.35s ease;
+}
+.card.card-visible, .wallet-card.card-visible, .streak-card.card-visible,
+.target-card.card-visible, .request-card.card-visible,
+.sla-notice-card.card-visible, .today-progress-card.card-visible {
+  opacity: 1; transform: translateY(0);
+}
+
+/* Animate-fade-up helper (for page-level elements) */
+.animate-fade-up {
+  animation: cardSlideUp 0.4s ease both;
+}
+.animate-delay-1 { animation-delay: 0.04s; }
+.animate-delay-2 { animation-delay: 0.08s; }
+.animate-delay-3 { animation-delay: 0.12s; }
+.animate-delay-4 { animation-delay: 0.16s; }
+
+/* ── Button Active Tap Feedback ──────────────────────────────────────────── */
+.btn:active:not(:disabled),
+.action-card:active,
+.pack-card:not(.pack-disabled):active,
+.bnav-item:active {
+  transform: scale(0.96) !important;
+  transition: transform 0.08s ease !important;
+}
+.btn-tapped { transform: scale(0.96) !important; }
+
+/* ── Bottom Navigation — Premium SVG Icons ───────────────────────────────── */
+.bnav-item {
+  flex: 1; display: flex; flex-direction: column;
+  align-items: center; justify-content: center; gap: 3px;
+  padding: 6px 0 8px;
+  color: var(--text-muted);
+  transition: color 0.2s ease;
+  text-decoration: none;
+  position: relative;
+  -webkit-tap-highlight-color: transparent;
+}
+.bnav-item::after { display: none; } /* Remove old line indicator */
+.bnav-icon-wrap {
+  width: 36px; height: 28px;
+  display: flex; align-items: center; justify-content: center;
+  border-radius: 10px;
+  transition: background 0.2s ease, transform 0.15s ease;
+  position: relative;
+}
+.bnav-svg {
+  width: 20px; height: 20px;
+  transition: stroke 0.2s ease, transform 0.2s ease;
+}
+.bnav-label {
+  font-size: 0.6rem; font-weight: 600;
+  letter-spacing: 0.02em;
+  transition: color 0.2s ease;
+}
+.bnav-item.active {
+  color: var(--green);
+}
+.bnav-item.active .bnav-icon-wrap {
+  background: rgba(0,255,136,0.12);
+}
+.bnav-item.active .bnav-svg {
+  stroke: var(--green);
+  filter: drop-shadow(0 0 6px rgba(0,255,136,0.5));
+}
+.bnav-item.active .bnav-label { color: var(--green); }
+.bnav-item:hover:not(.active) .bnav-icon-wrap {
+  background: rgba(255,255,255,0.05);
+}
+
+/* Center boost button */
+.bnav-center { position: relative; }
+.bnav-center-icon {
+  width: 46px; height: 36px;
+  background: linear-gradient(135deg, var(--green-dim), var(--purple-dim));
+  border-radius: 14px;
+  margin-top: -6px;
+  box-shadow: 0 2px 12px rgba(0,255,136,0.3);
+}
+.bnav-center-icon .bnav-svg { stroke: #000; width: 22px; height: 22px; }
+.bnav-item.bnav-center.active .bnav-icon-wrap {
+  background: linear-gradient(135deg, var(--green), var(--purple));
+  box-shadow: 0 2px 20px rgba(0,255,136,0.4);
+}
+.bnav-active-glow { animation: navGlow 2s ease-in-out infinite; }
+@keyframes navGlow {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(0,255,136,0.0); }
+  50% { box-shadow: 0 0 12px 2px rgba(0,255,136,0.2); }
+}
+
+/* ── Topbar Coin Badge ────────────────────────────────────────────────────── */
+.topbar-coins {
+  display: flex; align-items: center; gap: 5px;
+  font-size: 0.82rem; font-weight: 700; color: var(--green);
+  background: var(--green-glow);
+  padding: 0.3rem 0.7rem;
+  border-radius: 20px;
+  border: 1px solid rgba(0,255,136,0.22);
+  animation: coinBadgePulse 4s ease-in-out infinite;
+}
+@keyframes coinBadgePulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(0,255,136,0); }
+  50% { box-shadow: 0 0 8px 1px rgba(0,255,136,0.18); }
+}
+.topbar-logout {
+  width: 32px; height: 32px; padding: 0;
+  display: flex; align-items: center; justify-content: center;
+  border-radius: 8px;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* ── Wallet Card — Premium Polish ────────────────────────────────────────── */
+.wallet-shimmer {
+  position: absolute; inset: 0;
+  background: linear-gradient(
+    105deg,
+    transparent 40%,
+    rgba(255,255,255,0.03) 50%,
+    transparent 60%
+  );
+  background-size: 200% 100%;
+  animation: shimmerSlide 4s ease-in-out infinite;
+  pointer-events: none; border-radius: inherit;
+}
+@keyframes shimmerSlide {
+  0%   { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+.wallet-icon-wrap {
+  width: 52px; height: 52px; border-radius: 16px;
+  background: rgba(0,255,136,0.1);
+  border: 1px solid rgba(0,255,136,0.2);
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+}
+.wallet-info { display: flex; flex-direction: column; }
+.wallet-coins {
+  display: flex; align-items: baseline; gap: 4px;
+  font-size: 2.4rem; font-weight: 800;
+  font-family: var(--mono); color: var(--green);
+  line-height: 1; text-shadow: 0 0 20px rgba(0,255,136,0.4);
+}
+.wallet-coins-unit {
+  font-size: 0.85rem; font-weight: 600; color: rgba(0,255,136,0.6);
+  margin-bottom: 4px;
+}
+.wallet-streak-ring {
+  display: flex; flex-direction: column; align-items: center;
+  background: rgba(255,255,255,0.05);
+  border: 1px solid var(--border2);
+  border-radius: 12px;
+  padding: 0.5rem 0.75rem;
+  min-width: 52px; text-align: center;
+}
+.wsr-num   { font-size: 1.4rem; font-weight: 800; color: var(--text); line-height: 1; }
+.wsr-label { font-size: 0.58rem; color: var(--text-muted); line-height: 1.3; margin-top: 1px; }
+
+/* Streak badge pop animation */
+@keyframes badgePop {
+  0%   { transform: scale(0.6); opacity: 0; }
+  70%  { transform: scale(1.1); opacity: 1; }
+  100% { transform: scale(1); }
+}
+.animate-pop { animation: badgePop 0.4s cubic-bezier(0.34,1.56,0.64,1) both 0.3s; }
+
+/* ── Stats Grid — Upgraded ───────────────────────────────────────────────── */
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 0.625rem;
+  margin-bottom: 1rem;
+}
+.stat-card {
+  border-radius: var(--radius);
+  padding: 0.875rem;
+  display: flex; flex-direction: column; gap: 0.15rem;
+  position: relative; overflow: hidden;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+.stat-card:hover { transform: translateY(-1px); box-shadow: 0 4px 20px rgba(0,0,0,0.3); }
+.stat-icon-wrap {
+  margin-bottom: 0.35rem;
+}
+.stat-icon { font-size: 1.1rem; }
+.stat-value { font-size: 1.35rem; font-weight: 800; }
+.stat-label { font-size: 0.68rem; color: var(--text-muted); font-weight: 500; letter-spacing: 0.02em; }
+
+/* ── Quick Action Cards ───────────────────────────────────────────────────── */
+/* Override old .action-row / .action-btn */
+.action-grid {
+  display: flex; flex-direction: column; gap: 0.625rem;
+}
+.action-card {
+  display: flex; align-items: center; gap: 1rem;
+  padding: 0.875rem 1rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  text-decoration: none; color: var(--text);
+  position: relative; overflow: hidden;
+  transition: border-color 0.2s ease, background 0.2s ease, transform 0.15s ease;
+  -webkit-tap-highlight-color: transparent;
+}
+.action-card-glow {
+  position: absolute; inset: 0; opacity: 0;
+  transition: opacity 0.2s ease;
+  pointer-events: none; border-radius: inherit;
+}
+.action-card:hover .action-card-glow,
+.action-card:focus .action-card-glow { opacity: 1; }
+.action-data { border-left: 3px solid #38bdf8; }
+.action-data:hover { border-color: #38bdf8; background: rgba(56,189,248,0.05); }
+.action-data .action-card-glow { background: radial-gradient(circle at left, rgba(56,189,248,0.08), transparent 60%); }
+.action-boost { border-left: 3px solid var(--green); }
+.action-boost:hover { border-color: var(--green); background: var(--green-glow); }
+.action-boost .action-card-glow { background: radial-gradient(circle at left, rgba(0,255,136,0.1), transparent 60%); }
+.action-redeem { border-left: 3px solid var(--purple); }
+.action-redeem:hover { border-color: var(--purple); background: var(--purple-glow); }
+.action-redeem .action-card-glow { background: radial-gradient(circle at left, rgba(168,85,247,0.08), transparent 60%); }
+.action-card-icon {
+  font-size: 1.5rem; flex-shrink: 0;
+  width: 40px; height: 40px;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--surface2); border-radius: 10px;
+}
+.action-card-info { flex: 1; }
+.action-card-title { font-size: 0.9rem; font-weight: 700; color: var(--text); }
+.action-card-sub   { font-size: 0.72rem; color: var(--text-muted); margin-top: 1px; }
+.action-card-arrow {
+  font-size: 1.4rem; color: var(--text-muted);
+  transition: transform 0.2s ease, color 0.2s ease;
+  flex-shrink: 0; line-height: 1;
+}
+.action-card:hover .action-card-arrow { transform: translateX(3px); color: var(--text); }
+
+/* ── Greeting / Page Header ──────────────────────────────────────────────── */
+.dash-greeting {
+  display: flex; align-items: flex-start; justify-content: space-between;
+  margin-bottom: 1.1rem;
+}
+.page-header { margin-bottom: 1.25rem; }
+.page-header h1 { font-size: 1.4rem; font-weight: 700; margin: 0; }
+
+/* ── Empty Activity State ────────────────────────────────────────────────── */
+.empty-activity {
+  display: flex; flex-direction: column; align-items: center;
+  padding: 1.5rem 1rem; gap: 0.5rem; text-align: center;
+}
+.empty-activity-icon { font-size: 2rem; opacity: 0.4; }
+.empty-activity p { font-size: 0.8rem; color: var(--text-muted); }
+
+/* ── Toast — Cleaner icons ───────────────────────────────────────────────── */
+.toast-icon {
+  width: 20px; height: 20px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 0.7rem; font-weight: 800; flex-shrink: 0;
+}
+.toast-success .toast-icon { background: var(--green); color: #000; }
+.toast-error   .toast-icon { background: var(--red);   color: #fff; }
+.toast-info    .toast-icon { background: var(--purple); color: #fff; }
+.toast { pointer-events: auto; cursor: pointer; }
+.toast-msg { font-size: 0.83rem; }
+
+/* ── Skeleton Loading ────────────────────────────────────────────────────── */
+@keyframes skeletonPulse {
+  0%, 100% { opacity: 0.4; }
+  50% { opacity: 0.7; }
+}
+.skeleton {
+  background: var(--surface2);
+  border-radius: 4px;
+  animation: skeletonPulse 1.5s ease-in-out infinite;
+}
+.skeleton-text  { height: 0.75rem; border-radius: 4px; }
+.skeleton-title { height: 1.25rem; border-radius: 6px; }
+.skeleton-card  { height: 80px; border-radius: var(--radius); width: 100%; }
+
+/* ── Streak Flame Pulse ──────────────────────────────────────────────────── */
+@keyframes flameDance {
+  0%, 100% { transform: scale(1) rotate(-2deg); filter: drop-shadow(0 0 8px #f97316); }
+  25%       { transform: scale(1.05) rotate(2deg); }
+  50%       { transform: scale(1.02) rotate(-1deg); filter: drop-shadow(0 0 14px #f97316); }
+  75%       { transform: scale(1.05) rotate(1deg); }
+}
+.streak-flame { animation: flameDance 3s ease-in-out infinite; }
+.streak-flame-gold { animation: flameDance 2.5s ease-in-out infinite; filter: drop-shadow(0 0 10px #eab308) !important; }
+
+/* ── Section Title ───────────────────────────────────────────────────────── */
+.section-title {
+  font-size: 0.72rem; font-weight: 700;
+  color: var(--text-muted); text-transform: uppercase;
+  letter-spacing: 0.08em; margin-bottom: 0.625rem;
+}
+.section { margin-bottom: 0.875rem; }
+
+/* ── Mobile Responsiveness — 360–480px ───────────────────────────────────── */
+@media (max-width: 390px) {
+  .wallet-coins { font-size: 1.9rem; }
+  .wallet-icon-wrap { width: 44px; height: 44px; border-radius: 12px; }
+  .wallet-icon { font-size: 1.4rem; }
+  .wallet-rupees { font-size: 0.72rem; }
+
+  .stats-grid { gap: 0.5rem; }
+  .stat-card { padding: 0.75rem 0.625rem; }
+  .stat-value { font-size: 1.15rem; }
+  .stat-label { font-size: 0.62rem; }
+
+  .action-card { padding: 0.75rem 0.875rem; }
+  .action-card-icon { width: 36px; height: 36px; font-size: 1.2rem; border-radius: 9px; }
+  .action-card-title { font-size: 0.85rem; }
+
+  .streak-flame { font-size: 1.6rem; }
+  .streak-count { font-size: 1.4rem; }
+  .streak-flame-wrap { min-width: 50px; }
+
+  .main-content { padding-left: 0.75rem; padding-right: 0.75rem; }
+
+  .bottom-nav { height: 58px; }
+  .bnav-svg { width: 18px; height: 18px; }
+  .bnav-icon-wrap { width: 32px; height: 26px; }
+  .bnav-label { font-size: 0.55rem; }
+  .bnav-center-icon { width: 40px; height: 32px; }
+
+  .topbar { padding: 0 0.75rem; }
+  .brand-name { font-size: 1rem; }
+  .topbar-coins { font-size: 0.75rem; padding: 0.25rem 0.5rem; }
+
+  .page-header h1 { font-size: 1.2rem; }
+  .wsr-num { font-size: 1.2rem; }
+  .wallet-streak-ring { padding: 0.4rem 0.6rem; min-width: 46px; }
+}
+
+@media (max-width: 360px) {
+  .wallet-card { padding: 1.1rem 0.875rem; }
+  .wallet-coins { font-size: 1.7rem; }
+  .stat-value { font-size: 1.05rem; }
+  .stats-grid { gap: 0.4rem; }
+  .main-content { padding-left: 0.625rem; padding-right: 0.625rem; }
+  .bottom-nav { padding: 0 0.25rem; }
+}
+
+@media (min-width: 391px) and (max-width: 480px) {
+  .wallet-coins { font-size: 2.15rem; }
+  .stat-value { font-size: 1.25rem; }
+}
+
+/* Prevent horizontal scroll on all screens */
+.main-content { overflow-x: hidden; }
+body { overflow-x: hidden; max-width: 100vw; }
+
+/* ── Target Bar Glow ─────────────────────────────────────────────────────── */
+.target-bar-fill {
+  transition: width 0.7s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+.target-bar-done {
+  box-shadow: 0 0 10px rgba(0,255,136,0.5);
+}
+
+/* ── Streak Bar ──────────────────────────────────────────────────────────── */
+.streak-bar-fill {
+  transition: width 0.8s cubic-bezier(0.34, 1.56, 0.64, 1);
+}

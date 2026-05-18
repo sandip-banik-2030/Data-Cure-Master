@@ -1,71 +1,91 @@
+/* ── Datacure App JS — Premium UX Layer ─────────────────────── */
+
+/* ── Password Toggle ─────────────────────────────────────────── */
 function togglePwd(inputId, btn) {
   const input = document.getElementById(inputId);
   if (!input) return;
   if (input.type === 'password') {
-    input.type = 'text';
-    btn.textContent = '🙈';
+    input.type = 'text'; btn.textContent = '🙈';
   } else {
-    input.type = 'password';
-    btn.textContent = '👁';
+    input.type = 'password'; btn.textContent = '👁';
   }
 }
 
-/* ── Toast System ───────────────────────────────────────────── */
+/* ── Toast System ─────────────────────────────────────────────── */
 (function() {
-  const container = document.createElement('div');
-  container.id = 'toast-container';
-  document.body.appendChild(container);
+  const c = document.createElement('div');
+  c.id = 'toast-container';
+  document.body.appendChild(c);
 })();
 
 function showToast(msg, type = 'success', duration = 3500) {
   const container = document.getElementById('toast-container');
   if (!container) return;
+  const icons = { success: '✓', error: '✕', info: '⚡' };
   const t = document.createElement('div');
   t.className = `toast toast-${type}`;
-  t.innerHTML = `<span class="toast-icon">${type === 'success' ? '✅' : type === 'info' ? '⚡' : '❌'}</span><span class="toast-msg">${msg}</span>`;
+  t.innerHTML = `<span class="toast-icon">${icons[type] || '●'}</span><span class="toast-msg">${msg}</span>`;
   container.appendChild(t);
-  requestAnimationFrame(() => { t.classList.add('toast-in'); });
-  setTimeout(() => {
+  requestAnimationFrame(() => requestAnimationFrame(() => t.classList.add('toast-in')));
+  const remove = () => {
     t.classList.remove('toast-in');
     t.classList.add('toast-out');
     setTimeout(() => t.remove(), 350);
-  }, duration);
+  };
+  const timer = setTimeout(remove, duration);
+  t.addEventListener('click', () => { clearTimeout(timer); remove(); });
 }
 
-/* ── Wallet Glow Pulse ──────────────────────────────────────── */
+/* ── Wallet Pulse ─────────────────────────────────────────────── */
 function pulseWallet() {
   const w = document.getElementById('wallet-card');
   if (!w) return;
+  w.classList.remove('wallet-pulse');
+  void w.offsetWidth; // reflow
   w.classList.add('wallet-pulse');
   setTimeout(() => w.classList.remove('wallet-pulse'), 900);
 }
 
-/* ── Live Coin Counter Update ───────────────────────────────── */
+/* ── Animated Coin Counter ────────────────────────────────────── */
+function animateNumber(el, from, to, duration = 600) {
+  if (!el || from === to) { if (el) el.textContent = to; return; }
+  const start = performance.now();
+  const diff = to - from;
+  function step(now) {
+    const elapsed = Math.min(now - start, duration);
+    const progress = elapsed / duration;
+    // Ease-out cubic
+    const ease = 1 - Math.pow(1 - progress, 3);
+    el.textContent = Math.round(from + diff * ease);
+    if (elapsed < duration) requestAnimationFrame(step);
+    else el.textContent = to;
+  }
+  requestAnimationFrame(step);
+}
+
+/* ── Live Coin Counter Update ────────────────────────────────── */
 function updateCoinDisplays(newCoins) {
-  const els = document.querySelectorAll('[data-live="coins"]');
-  els.forEach(el => { el.textContent = newCoins; });
   const topbar = document.getElementById('topbar-coins-val');
-  if (topbar) topbar.textContent = newCoins;
+  if (topbar) {
+    const old = parseInt(topbar.textContent) || 0;
+    animateNumber(topbar, old, newCoins);
+  }
+  document.querySelectorAll('[data-live="coins"]').forEach(el => {
+    const old = parseInt(el.textContent) || 0;
+    animateNumber(el, old, newCoins);
+  });
   pulseWallet();
 }
 
-/* ── Dashboard AJAX Refresh ─────────────────────────────────── */
-let dashboardRefreshTimer = null;
-function startDashboardRefresh() {
-  if (!document.getElementById('wallet-card')) return;
-  dashboardRefreshTimer = setInterval(refreshDashboardStats, 30000);
-}
+/* ── Dashboard AJAX Refresh ──────────────────────────────────── */
 function refreshDashboardStats() {
   fetch('/x/dashboard-stats')
     .then(r => r.ok ? r.json() : null)
     .then(data => {
       if (!data) return;
-      const coinEls = document.querySelectorAll('[data-live="coins"]');
-      coinEls.forEach(el => { el.textContent = data.coins; });
-      const topbar = document.getElementById('topbar-coins-val');
-      if (topbar) topbar.textContent = data.coins;
+      updateCoinDisplays(data.coins);
       const rupeeEl = document.getElementById('live-rupees');
-      if (rupeeEl) rupeeEl.textContent = data.rupees.toFixed(2);
+      if (rupeeEl) rupeeEl.textContent = Math.floor(data.rupees);
       const todayEl = document.getElementById('live-today-data');
       if (todayEl) todayEl.textContent = data.today_data_saved;
       const lifeEl = document.getElementById('live-lifetime-data');
@@ -76,6 +96,7 @@ function refreshDashboardStats() {
     })
     .catch(() => {});
 }
+
 function _updateTargetBar(saved, target) {
   const bar = document.getElementById('target-bar-fill');
   const label = document.getElementById('target-bar-label');
@@ -85,4 +106,78 @@ function _updateTargetBar(saved, target) {
     ? `${saved} / ${target} MB  (${pct}%)`
     : 'No target set';
 }
-document.addEventListener('DOMContentLoaded', startDashboardRefresh);
+
+/* ── Card Stagger Animation on Page Load ─────────────────────── */
+function initCardAnimations() {
+  const cards = document.querySelectorAll(
+    '.card, .wallet-card, .streak-card, .target-card, .stat-card, .action-card, .request-card, .sla-notice-card'
+  );
+  if (!cards.length) return;
+  const observer = new IntersectionObserver((entries) => {
+    entries.forEach(entry => {
+      if (entry.isIntersecting) {
+        entry.target.classList.add('card-visible');
+        observer.unobserve(entry.target);
+      }
+    });
+  }, { threshold: 0.1, rootMargin: '0px 0px -20px 0px' });
+  cards.forEach((card, i) => {
+    card.style.transitionDelay = `${i * 40}ms`;
+    observer.observe(card);
+  });
+}
+
+/* ── Button Tap Ripple ───────────────────────────────────────── */
+function initButtonRipples() {
+  document.querySelectorAll('.btn, .action-card, .pack-card, .bnav-item').forEach(el => {
+    el.addEventListener('pointerdown', function(e) {
+      this.classList.add('btn-tapped');
+      setTimeout(() => this.classList.remove('btn-tapped'), 150);
+    }, { passive: true });
+  });
+}
+
+/* ── Bottom Nav Active Pulse ─────────────────────────────────── */
+function initNavHighlight() {
+  const active = document.querySelector('.bnav-item.active');
+  if (active) {
+    const wrap = active.querySelector('.bnav-icon-wrap');
+    if (wrap) wrap.classList.add('bnav-active-glow');
+  }
+}
+
+/* ── Page Fade-in ─────────────────────────────────────────────── */
+function initPageTransition() {
+  const main = document.getElementById('main-content');
+  if (main) {
+    main.classList.add('page-entering');
+    requestAnimationFrame(() =>
+      requestAnimationFrame(() => main.classList.add('page-entered'))
+    );
+  }
+  // Intercept nav clicks for smooth exit
+  document.querySelectorAll('a:not([target]):not([href^="#"]):not([href^="mailto"])').forEach(link => {
+    link.addEventListener('click', function(e) {
+      const href = this.getAttribute('href');
+      if (!href || href.startsWith('http') || href.startsWith('javascript')) return;
+      if (main) {
+        e.preventDefault();
+        main.classList.remove('page-entered');
+        setTimeout(() => { window.location.href = href; }, 180);
+      }
+    });
+  });
+}
+
+/* ── Auto-start Dashboard Refresh ───────────────────────────── */
+document.addEventListener('DOMContentLoaded', function() {
+  initPageTransition();
+  initCardAnimations();
+  initButtonRipples();
+  initNavHighlight();
+
+  // Auto-refresh dashboard stats every 30s
+  if (document.getElementById('wallet-card')) {
+    setInterval(refreshDashboardStats, 30000);
+  }
+});

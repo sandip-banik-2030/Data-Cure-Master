@@ -2,7 +2,8 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="theme-color" content="#080810" />
   <title>{% block title %}Datacure{% endblock %}</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -18,28 +19,68 @@
     <span class="brand-name">Datacure</span>
   </div>
   <div class="topbar-right">
-    <span class="topbar-coins">🪙 <span id="topbar-coins-val">{{ get_user_coins() }}</span></span>
-    <a href="{{ url_for('logout') }}" class="topbar-logout">Logout</a>
+    <div class="topbar-coins">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" style="flex-shrink:0;"><circle cx="12" cy="12" r="10"/><path d="M12 6v12M8 9h8M8 15h8" stroke="#000" stroke-width="1.5" stroke-linecap="round"/></svg>
+      <span id="topbar-coins-val">{{ get_user_coins() }}</span>
+    </div>
+    <a href="{{ url_for('logout') }}" class="topbar-logout" aria-label="Logout">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+    </a>
   </div>
 </header>
-<nav class="bottom-nav">
-  <a href="{{ url_for('dashboard') }}" class="bnav-item {% if request.endpoint == 'dashboard' %}active{% endif %}">
-    <span class="bnav-icon">⊞</span><span class="bnav-label">Home</span>
+
+<nav class="bottom-nav" role="navigation" aria-label="Main navigation">
+  <a href="{{ url_for('dashboard') }}" class="bnav-item {% if request.endpoint == 'dashboard' %}active{% endif %}" aria-label="Home">
+    <div class="bnav-icon-wrap">
+      <svg class="bnav-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
+        <polyline points="9 22 9 12 15 12 15 22"/>
+      </svg>
+    </div>
+    <span class="bnav-label">Home</span>
   </a>
-  <a href="{{ url_for('log_data') }}" class="bnav-item {% if request.endpoint == 'log_data' %}active{% endif %}">
-    <span class="bnav-icon">📶</span><span class="bnav-label">Log Data</span>
+  <a href="{{ url_for('log_data') }}" class="bnav-item {% if request.endpoint == 'log_data' %}active{% endif %}" aria-label="Log Data">
+    <div class="bnav-icon-wrap">
+      <svg class="bnav-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M1.41 8.9a13.9 13.9 0 0 1 21.18 0"/>
+        <path d="M5.33 12.83a8.35 8.35 0 0 1 13.34 0"/>
+        <circle cx="12" cy="20" r="1.5" fill="currentColor" stroke="none"/>
+      </svg>
+    </div>
+    <span class="bnav-label">Data</span>
   </a>
-  <a href="{{ url_for('rewards') }}" class="bnav-item {% if request.endpoint == 'rewards' %}active{% endif %}">
-    <span class="bnav-icon">▶</span><span class="bnav-label">Ads</span>
+  <a href="{{ url_for('rewards') }}" class="bnav-item bnav-center {% if request.endpoint == 'rewards' %}active{% endif %}" aria-label="Boost Coins">
+    <div class="bnav-icon-wrap bnav-center-icon">
+      <svg class="bnav-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>
+      </svg>
+    </div>
+    <span class="bnav-label">Boost</span>
   </a>
-  <a href="{{ url_for('redeem') }}" class="bnav-item {% if request.endpoint == 'redeem' %}active{% endif %}">
-    <span class="bnav-icon">📱</span><span class="bnav-label">Redeem</span>
+  <a href="{{ url_for('redeem') }}" class="bnav-item {% if request.endpoint == 'redeem' %}active{% endif %}" aria-label="Redeem">
+    <div class="bnav-icon-wrap">
+      <svg class="bnav-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <rect x="5" y="2" width="14" height="20" rx="2"/>
+        <line x1="12" y1="18" x2="12" y2="18.01" stroke-width="3"/>
+      </svg>
+    </div>
+    <span class="bnav-label">Redeem</span>
   </a>
-  <a href="{{ url_for('my_requests') }}" class="bnav-item {% if request.endpoint == 'my_requests' %}active{% endif %}">
-    <span class="bnav-icon">📋</span><span class="bnav-label">History</span>
+  <a href="{{ url_for('my_requests') }}" class="bnav-item {% if request.endpoint == 'my_requests' %}active{% endif %}" aria-label="My Requests">
+    <div class="bnav-icon-wrap">
+      <svg class="bnav-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+        <polyline points="14 2 14 8 20 8"/>
+        <line x1="16" y1="13" x2="8" y2="13"/>
+        <line x1="16" y1="17" x2="8" y2="17"/>
+        <polyline points="10 9 9 9 8 9"/>
+      </svg>
+    </div>
+    <span class="bnav-label">History</span>
   </a>
 </nav>
-<main class="main-content">
+
+<main class="main-content" id="main-content">
 {% else %}
 <main class="auth-main">
 {% endif %}
