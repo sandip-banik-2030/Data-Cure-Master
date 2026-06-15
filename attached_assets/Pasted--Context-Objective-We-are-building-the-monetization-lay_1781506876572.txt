@@ -1,0 +1,34 @@
+# Context & Objective
+We are building the monetization layout for my Python application "Datacure". I have successfully set up my production Google AdMob account and generated our production keys. 
+
+We need to implement a complete, robust Google AdMob integration architecture within our Python setup. The system must support two distinct types of ads while enforcing strict traffic safety guidelines to protect the account from policy bans.
+
+# AdMob Production Credentials
+Please use these variables in the configuration block of the code:
+- ADMOB_APP_ID = "ca-app-pub-1984458211665769~3776326573"
+- BANNER_AD_UNIT_ID = "ca-app-pub-1984458211665769/7041120862"
+- REWARDED_VIDEO_AD_UNIT_ID = "ca-app-pub-1984458211665769/4573863922"
+
+# Core Functional Requirements
+
+## 1. Google Mobile Ads SDK Integration
+- Set up the structural bridge/dependencies (e.g., via Android manifest requirements, gradle dependencies, or Python wrapper rules like KivMob/jnius if compiling via Buildozer) to cleanly initialize the AdMob system using the master `ADMOB_APP_ID`.
+- Ensure there is a flag to easily toggle between Google's Official Test IDs (for development) and my Production IDs listed above. 
+
+## 2. Tab Banner Ad Logic (`Datacure_Tab_Banner`)
+- Implement a banner ad wrapper that initializes a standard banner view at the bottom of the layout screen.
+- Write a handler function that executes every single time the user switches tabs or sections inside the main app navigation interface. This function should trigger the standard AdMob banner container refresh/load sequence naturally.
+
+## 3. Earn Money Video Ad Logic (`Datacure_Earn_Money_Video`)
+- Create an invocation function linked to the "See ad to earn money" UI button.
+- When clicked, it must fetch, pre-load, and display a standard 30–60 second **Rewarded Video Ad**.
+- Implement a callback listener: when the user completely finishes watching the video ad, trigger a safe script operation that adds a set reward amount (e.g., 10 coins/points) directly to their local profile database state.
+
+## 4. Account Safety & Anti-Ban Architecture (Batch-Tracking Logic)
+To prevent Google from flagging our account, implement an updated batch-count restriction rule in the app's state tracker:
+- **Daily Frequency Cap:** Restrict every individual user's database entry to a maximum of **15 successful Rewarded Video watches per 24 hours**. Once a user hits 15 total views for the day, completely disable the button until the daily reset.
+- **5-Ad Batch Cool-down Timer:** Track how many ads a user watches in a continuous row. A user can watch up to 5 rewarded ads with no delay. The moment the **5th ad** finishes playing, trigger a mandatory **2-minute structural cool-down timer (120 seconds)**. 
+- During this 2-minute cooldown, lock the "See ad to earn money" button, and display a clear countdown timer text overlaying the button so the user knows exactly when the next batch unlocks. Once the 2 minutes pass, reset the batch counter to 0 so they can stream their next ads.
+
+# Output Request
+Please provide the clean, modular Python codebase blocks and build spec updates required to handle these implementations step-by-step. Keep the code optimized, highly commented, and ready for deployment on our environment.

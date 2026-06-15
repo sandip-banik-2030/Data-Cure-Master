@@ -29,6 +29,14 @@
   </div>
 </header>
 
+<!-- ── AdMob Banner Slot (Datacure_Tab_Banner) ──────────────────────────────
+     In a native Capacitor/Cordova wrapper this DOM node is replaced by the
+     real AdMob banner SDK using BANNER_AD_UNIT_ID from services/admob.py.
+     In browser / PWA mode it shows a slim themed placeholder. -->
+<div id="admob-banner-slot" class="admob-banner-slot" role="complementary" aria-label="Advertisement">
+  <span class="admob-banner-inner">⚡ Datacure &nbsp;·&nbsp; Save Data. Earn Coins.</span>
+</div>
+
 <nav class="bottom-nav" role="navigation" aria-label="Main navigation">
   <a href="{{ url_for('dashboard') }}" class="bnav-item {% if request.endpoint == 'dashboard' %}active{% endif %}" aria-label="Home">
     <div class="bnav-icon-wrap">

@@ -7,19 +7,39 @@
   <p class="page-sub">Watch a short ad to earn <strong class="text-green">{{ coins_per_ad }} coins</strong> instantly</p>
 </div>
 
+{% if admob_test_mode %}
+<div class="admob-test-badge">🧪 AdMob TEST MODE — simulated ads active</div>
+{% endif %}
+
 <div class="rewards-layout">
 
   <!-- ── Main Ad Card ──────────────────────────────────── -->
   <div class="card ad-card" id="ad-card">
 
     <!-- Daily progress bar -->
-    <div class="ad-progress-wrap" style="width:100%;margin-bottom:1.5rem;">
+    <div class="ad-progress-wrap" style="width:100%;margin-bottom:1.25rem;">
       <div class="ad-progress-bar">
         <div class="ad-progress-fill" id="daily-bar"
              style="width: {{ [(ads_today / max_ads) * 100, 100]|min }}%"></div>
       </div>
       <span class="ad-progress-label">
         <span id="ads-today-count">{{ ads_today }}</span> / {{ max_ads }} ads today
+      </span>
+    </div>
+
+    <!-- 5-Ad Batch progress dots -->
+    <div class="batch-tracker" id="batch-tracker" title="Batch progress — cooldown after {{ ad_batch_size }} consecutive ads">
+      {% for i in range(ad_batch_size) %}
+      <div class="batch-dot {% if i < batch_count %}batch-dot-filled{% endif %}" id="batch-dot-{{ i }}"></div>
+      {% endfor %}
+      <span class="batch-label" id="batch-label">
+        {% if in_cooldown %}
+          Cooldown active
+        {% elif batch_count > 0 %}
+          {{ batch_count }}/{{ ad_batch_size }} in batch
+        {% else %}
+          {{ ad_batch_size }}-ad batch
+        {% endif %}
       </span>
     </div>
 
@@ -35,18 +55,31 @@
     <!-- Status message -->
     <div id="ad-status" class="alert" style="display:none;margin-top:0.75rem;text-align:center;"></div>
 
-    <!-- Watch button / limit banner -->
+    <!-- Watch button / limit banner / cooldown banner -->
     {% if ads_today >= max_ads %}
     <div class="alert alert-warning" style="margin-top:1rem;text-align:center;">
       🌙 Daily limit of {{ max_ads }} ads reached. Come back tomorrow!
     </div>
     <button class="btn btn-primary btn-full" disabled style="margin-top:0.75rem;">Daily Limit Reached</button>
+
+    {% elif in_cooldown %}
+    <div class="cooldown-banner" id="cooldown-banner-static">
+      <div class="cooldown-icon">⏸</div>
+      <div class="cooldown-text">
+        <strong>Batch cooldown — {{ ad_batch_size }} ads watched!</strong><br>
+        <span id="cooldown-static-msg">Wait <strong id="cooldown-static-secs">{{ cooldown_secs_left }}</strong>s before the next batch.</span>
+      </div>
+    </div>
+    <button class="btn btn-primary btn-full" id="watch-btn" disabled style="margin-top:0.75rem;">
+      ⏸&nbsp; Cooldown — <span id="cooldown-btn-secs">{{ cooldown_secs_left }}</span>s
+    </button>
+
     {% else %}
     <button class="btn btn-primary btn-full" id="watch-btn" onclick="openAdModal()"
             style="margin-top:1rem;">
       ▶&nbsp; Watch Ad &nbsp;(+{{ coins_per_ad }} coins)
     </button>
-    <p class="submit-note" style="margin-top:0.5rem;">Ad must be watched fully to earn coins</p>
+    <p class="submit-note" style="margin-top:0.5rem;">Ad must be watched fully · 5-ad batch limit</p>
     {% endif %}
   </div>
 
@@ -69,13 +102,29 @@
       <span class="ad-stat-label">Remaining Today</span>
       <span class="ad-stat-val text-purple" id="remaining-stat">{{ max_ads - ads_today }}</span>
     </div>
+    <div class="ad-stat-row">
+      <span class="ad-stat-label">Batch Position</span>
+      <span class="ad-stat-val" id="batch-stat"><span id="batch-stat-pos">{{ batch_count }}</span>/{{ ad_batch_size }}</span>
+    </div>
 
     <div class="ad-info-box">
       <p>⚡ Earn <strong class="text-green">{{ coins_per_ad }} coins</strong> per ad</p>
       <p>📅 Max <strong>{{ max_ads }}</strong> ads per day</p>
       <p>🔒 Must watch full {{ ad_duration }}s ad</p>
+      <p>⏸ {{ ad_batch_size }}-ad batch → {{ ad_batch_cooldown }}s rest</p>
       <p>🛡️ Server-verified reward</p>
     </div>
+
+    <!-- AdMob unit IDs (for native integration reference) -->
+    <details class="admob-details" style="margin-top:0.75rem;">
+      <summary style="font-size:0.72rem;color:var(--text-muted);cursor:pointer;">AdMob Unit Info</summary>
+      <div style="font-size:0.68rem;color:var(--text-muted);margin-top:0.4rem;font-family:var(--mono);line-height:1.6;">
+        {% if admob_test_mode %}
+        <div style="color:var(--yellow);">⚠ TEST MODE</div>
+        {% endif %}
+        <div>Unit: {{ rewarded_ad_unit_id[:30] }}…</div>
+      </div>
+    </details>
   </div>
 </div>
 
@@ -101,7 +150,10 @@
     <!-- State: Watching -->
     <div id="modal-state-watching" class="modal-state" style="display:none;">
 
-      <!-- Simulated ad creative -->
+      <!-- Batch position pill -->
+      <div class="modal-batch-pill" id="modal-batch-pill">Ad <span id="modal-batch-pos">1</span> of {{ ad_batch_size }}</div>
+
+      <!-- Simulated ad creative (Datacure_Earn_Money_Video) -->
       <div class="ad-creative">
         <div class="ad-creative-badge">AD</div>
         <div class="ad-creative-icon">📱</div>
@@ -143,6 +195,7 @@
       <div class="modal-success-balance">
         Balance: <strong id="modal-balance-val" class="text-green">0</strong> coins
       </div>
+      <div id="modal-batch-banner" class="modal-batch-banner" style="display:none;"></div>
       <button class="btn btn-primary" onclick="closeAdModal()" style="margin-top:1.5rem;min-width:160px;">
         Awesome! ✓
       </button>
@@ -158,23 +211,126 @@
       </button>
     </div>
 
+    <!-- State: Batch Cooldown (fullscreen overlay inside modal) -->
+    <div id="modal-state-cooldown" class="modal-state cooldown-modal-state" style="display:none;">
+      <div class="cooldown-modal-icon">⏸</div>
+      <div class="cooldown-modal-heading">Batch Complete!</div>
+      <div class="cooldown-modal-sub">You watched {{ ad_batch_size }} ads in a row.<br>Mandatory 2-minute break starting now.</div>
+      <div class="cooldown-modal-timer">
+        <svg viewBox="0 0 100 100" width="90" height="90">
+          <circle cx="50" cy="50" r="42" fill="none" stroke="rgba(168,85,247,0.2)" stroke-width="7"/>
+          <circle id="cooldown-arc" cx="50" cy="50" r="42" fill="none"
+                  stroke="var(--purple)" stroke-width="7"
+                  stroke-linecap="round"
+                  stroke-dasharray="263.89"
+                  stroke-dashoffset="0"
+                  transform="rotate(-90 50 50)"/>
+        </svg>
+        <span id="cooldown-modal-secs" class="cooldown-modal-secs">{{ ad_batch_cooldown }}</span>
+      </div>
+      <p class="cooldown-modal-note">Next batch of {{ ad_batch_size }} ads unlocks in <strong id="cooldown-modal-secs-label">{{ ad_batch_cooldown }}</strong>s</p>
+      <button class="btn btn-outline" onclick="closeCooldownModal()" style="margin-top:1.25rem;min-width:160px;">
+        Got It
+      </button>
+    </div>
+
   </div>
 </div>
 
 {% endblock %}
 {% block scripts %}
 <script>
-const COINS_PER_AD   = {{ coins_per_ad }};
-const MAX_ADS        = {{ max_ads }};
-const AD_DURATION    = {{ ad_duration }};
-const CSRF_TOKEN     = "{{ csrf_token }}";
+const COINS_PER_AD    = {{ coins_per_ad }};
+const MAX_ADS         = {{ max_ads }};
+const AD_DURATION     = {{ ad_duration }};
+const CSRF_TOKEN      = "{{ csrf_token }}";
+const AD_BATCH_SIZE   = {{ ad_batch_size }};
+const AD_BATCH_CD_SECS = {{ ad_batch_cooldown }};
 
 // ── State machine ──────────────────────────────────────────
-let adState    = 'idle';   // idle | starting | watching | completing | done | error
+let adState    = 'idle';
 let adToken    = null;
 let timerIval  = null;
 let closeIval  = null;
+let cdIval     = null;       // batch cooldown countdown interval
 let remaining  = AD_DURATION;
+let batchPos   = {{ batch_count }};   // current position in batch (0-indexed)
+let inCooldown = {{ 'true' if in_cooldown else 'false' }};
+let cdSecsLeft = {{ cooldown_secs_left }};
+
+// ── On load: if already in cooldown, start the page-level countdown ──────────
+document.addEventListener('DOMContentLoaded', () => {
+  if (inCooldown && cdSecsLeft > 0) {
+    startPageCooldownCountdown(cdSecsLeft);
+  }
+  renderBatchDots(batchPos);
+});
+
+// ── Page-level cooldown countdown (updates button text + static banner) ───────
+function startPageCooldownCountdown(secs) {
+  let left = secs;
+  updateCooldownDisplay(left);
+
+  cdIval = setInterval(() => {
+    left--;
+    if (left <= 0) {
+      clearInterval(cdIval);
+      inCooldown = false;
+      cdSecsLeft = 0;
+      onCooldownEnd();
+    } else {
+      updateCooldownDisplay(left);
+    }
+  }, 1000);
+}
+
+function updateCooldownDisplay(left) {
+  const btnSecs  = document.getElementById('cooldown-btn-secs');
+  const statSecs = document.getElementById('cooldown-static-secs');
+  const mSecs    = document.getElementById('cooldown-modal-secs');
+  const mLabel   = document.getElementById('cooldown-modal-secs-label');
+  const arcEl    = document.getElementById('cooldown-arc');
+  if (btnSecs)  btnSecs.textContent  = left;
+  if (statSecs) statSecs.textContent = left;
+  if (mSecs)    mSecs.textContent    = left;
+  if (mLabel)   mLabel.textContent   = left;
+  if (arcEl) {
+    const pct = left / AD_BATCH_CD_SECS;
+    arcEl.style.strokeDashoffset = 263.89 * (1 - pct);
+  }
+}
+
+function onCooldownEnd() {
+  const btn = document.getElementById('watch-btn');
+  if (btn) {
+    btn.disabled    = false;
+    btn.innerHTML   = '▶&nbsp; Watch Ad &nbsp;(+' + COINS_PER_AD + ' coins)';
+    btn.onclick     = openAdModal;
+  }
+  const banner = document.getElementById('cooldown-banner-static');
+  if (banner) banner.style.display = 'none';
+  updateBatchLabel(0);
+  renderBatchDots(0);
+}
+
+// ── Batch dot UI ───────────────────────────────────────────
+function renderBatchDots(count) {
+  for (let i = 0; i < AD_BATCH_SIZE; i++) {
+    const dot = document.getElementById('batch-dot-' + i);
+    if (!dot) continue;
+    dot.classList.toggle('batch-dot-filled', i < count);
+  }
+  const pos = document.getElementById('batch-stat-pos');
+  if (pos) pos.textContent = count % AD_BATCH_SIZE;
+}
+
+function updateBatchLabel(count) {
+  const lbl = document.getElementById('batch-label');
+  if (!lbl) return;
+  if (inCooldown)       lbl.textContent = 'Cooldown active';
+  else if (count > 0)   lbl.textContent = count + '/' + AD_BATCH_SIZE + ' in batch';
+  else                  lbl.textContent = AD_BATCH_SIZE + '-ad batch';
+}
 
 // ── Open modal ─────────────────────────────────────────────
 function openAdModal() {
@@ -192,6 +348,16 @@ function openAdModal() {
   .then(r => r.json())
   .then(data => {
     if (!data.ok) {
+      if (data.reason === 'batch_cooldown') {
+        // Server says cooldown — show cooldown modal state
+        adState = 'idle';
+        inCooldown  = true;
+        cdSecsLeft  = data.cooldown_secs || AD_BATCH_CD_SECS;
+        setModalState('cooldown');
+        updateCooldownDisplay(cdSecsLeft);
+        startPageCooldownCountdown(cdSecsLeft);
+        return;
+      }
       const msg = data.reason === 'daily_limit'
         ? 'You have reached the daily limit of ' + MAX_ADS + ' ads.'
         : (data.error || 'Could not start ad. Please try again.');
@@ -201,6 +367,9 @@ function openAdModal() {
     adToken   = data.token;
     remaining = data.duration || AD_DURATION;
     adState   = 'watching';
+    // Update batch position pill
+    const pill = document.getElementById('modal-batch-pos');
+    if (pill) pill.textContent = data.batch_pos || (batchPos + 1);
     setModalState('watching');
     startCountdown(remaining);
     startCloseLockdown(remaining);
@@ -230,9 +399,9 @@ function startCountdown(duration) {
 
 // ── Close button lockdown ──────────────────────────────────
 function startCloseLockdown(duration) {
-  const btn       = document.getElementById('ad-close-btn');
-  const cdSpan    = document.getElementById('ad-close-countdown');
-  let   left      = duration;
+  const btn    = document.getElementById('ad-close-btn');
+  const cdSpan = document.getElementById('ad-close-countdown');
+  let   left   = duration;
   cdSpan.textContent = left + 's';
 
   closeIval = setInterval(() => {
@@ -240,7 +409,6 @@ function startCloseLockdown(duration) {
     if (left <= 0) {
       clearInterval(closeIval);
       cdSpan.textContent = '';
-      // Only unlock close btn if ad finished or errored
       if (adState !== 'watching') btn.disabled = false;
     } else {
       cdSpan.textContent = left + 's';
@@ -261,20 +429,43 @@ function completeAd() {
   .then(r => r.json())
   .then(data => {
     if (data.ok) {
-      adState = 'done';
+      adState    = 'done';
+      batchPos   = data.batch_size && data.cooldown_triggered ? 0 : (data.batch_pos || batchPos + 1);
       const newAdsToday = data.ads_today;
       updateAdStats(newAdsToday, data.total_coins);
       document.getElementById('modal-balance-val').textContent = data.total_coins;
+
       const sub = data.remaining > 0
         ? `You have ${data.remaining} more ad${data.remaining === 1 ? '' : 's'} available today.`
         : 'Daily limit reached. Come back tomorrow!';
       document.getElementById('modal-success-sub').textContent = sub;
+
+      // Batch banner
+      const batchBanner = document.getElementById('modal-batch-banner');
+      if (data.cooldown_triggered) {
+        batchBanner.style.display = 'block';
+        batchBanner.innerHTML     = `⏸ <strong>Batch of ${data.batch_size} done!</strong> 2-min cooldown starts now.`;
+        batchBanner.className     = 'modal-batch-banner batch-banner-cooldown';
+      } else {
+        batchBanner.style.display = 'block';
+        batchBanner.innerHTML     = `🎯 Ad ${data.batch_pos} of ${data.batch_size} in this batch`;
+        batchBanner.className     = 'modal-batch-banner';
+      }
+
       setModalState('success');
       document.getElementById('ad-close-btn').disabled = false;
       document.getElementById('ad-close-countdown').textContent = '';
+      renderBatchDots(data.cooldown_triggered ? 0 : data.batch_pos);
+      updateBatchLabel(data.cooldown_triggered ? 0 : data.batch_pos);
       updateCoinDisplays(data.total_coins);
       pulseWallet();
       showToast('+' + COINS_PER_AD + ' coins earned from ad!', 'success');
+
+      // If cooldown triggered, start page-level countdown after user closes modal
+      if (data.cooldown_triggered) {
+        inCooldown = true;
+        cdSecsLeft = data.cooldown_secs || AD_BATCH_CD_SECS;
+      }
     } else {
       showModalError(data.error || 'Failed to claim reward. Please try again.');
     }
@@ -308,20 +499,17 @@ document.addEventListener('visibilitychange', () => {
   }
 });
 
-// ── Page unload (refresh / navigate away) ─────────────────
+// ── Page unload ────────────────────────────────────────────
 window.addEventListener('beforeunload', () => {
-  if (adState === 'watching' || adState === 'starting') {
-    abortAd('page_unload');
-  }
+  if (adState === 'watching' || adState === 'starting') abortAd('page_unload');
 });
 
 // ── Close modal ────────────────────────────────────────────
 function closeAdModal() {
-  if (adState === 'watching') return;   // hard block
+  if (adState === 'watching') return;
   clearInterval(timerIval);
   clearInterval(closeIval);
   showOverlay(false);
-  // Reset state for next ad
   adState   = 'idle';
   adToken   = null;
   remaining = AD_DURATION;
@@ -329,6 +517,36 @@ function closeAdModal() {
   document.getElementById('modal-timer-text').textContent = AD_DURATION;
   document.getElementById('ad-close-btn').disabled = true;
   document.getElementById('ad-close-countdown').textContent = '';
+  document.getElementById('modal-batch-banner').style.display = 'none';
+
+  // If a cooldown was just triggered, start the page-level countdown
+  if (inCooldown && cdSecsLeft > 0) {
+    clearInterval(cdIval);
+    startPageCooldownCountdown(cdSecsLeft);
+    // Update the watch button to show cooldown
+    const btn = document.getElementById('watch-btn');
+    if (btn) {
+      btn.disabled  = true;
+      btn.innerHTML = '⏸&nbsp; Cooldown — <span id="cooldown-btn-secs">' + cdSecsLeft + '</span>s';
+    }
+  }
+}
+
+function closeCooldownModal() {
+  clearInterval(timerIval);
+  clearInterval(closeIval);
+  showOverlay(false);
+  adState = 'idle';
+  adToken = null;
+  if (inCooldown && cdSecsLeft > 0) {
+    clearInterval(cdIval);
+    startPageCooldownCountdown(cdSecsLeft);
+    const btn = document.getElementById('watch-btn');
+    if (btn) {
+      btn.disabled  = true;
+      btn.innerHTML = '⏸&nbsp; Cooldown — <span id="cooldown-btn-secs">' + cdSecsLeft + '</span>s';
+    }
+  }
 }
 
 // ── UI helpers ─────────────────────────────────────────────
@@ -338,7 +556,7 @@ function showOverlay(show) {
 }
 
 function setModalState(state) {
-  ['loading','watching','success','error'].forEach(s => {
+  ['loading','watching','success','error','cooldown'].forEach(s => {
     document.getElementById('modal-state-' + s).style.display =
       s === state ? 'flex' : 'none';
   });
@@ -362,19 +580,17 @@ function updateAdStats(adsToday, totalCoins) {
   if (totalEl) totalEl.textContent = parseInt(totalEl.textContent || 0) + 1;
   const adCoinsEl = document.getElementById('ad-coins-stat');
   if (adCoinsEl) adCoinsEl.textContent = parseInt(adCoinsEl.textContent || 0) + COINS_PER_AD;
-  // Update daily bar
   const bar = document.getElementById('daily-bar');
   if (bar) bar.style.width = Math.min((adsToday / MAX_ADS) * 100, 100) + '%';
-  // Gray out the main watch button if limit hit
   if (adsToday >= MAX_ADS) {
     const btn = document.getElementById('watch-btn');
     if (btn) { btn.textContent = 'Daily Limit Reached'; btn.disabled = true; }
   }
 }
 
-// Keyboard: Escape key cannot close during ad
 document.addEventListener('keydown', e => {
   if (e.key === 'Escape' && adState !== 'watching' && adState !== 'starting') {
+    if (adState === 'idle') return;
     closeAdModal();
   }
 });

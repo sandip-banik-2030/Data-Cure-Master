@@ -27,6 +27,12 @@ from services.security import (
     EVENT_ADMIN_ACTION, EVENT_RATE_LIMITED, EVENT_SPAM_ATTEMPT,
     EVENT_INVALID_TOKEN, EVENT_DATA_CAP_HIT, EVENT_DATA_DUPE,
 )
+from services.admob import (
+    TEST_MODE as ADMOB_TEST_MODE,
+    ADMOB_APP_ID, BANNER_AD_UNIT_ID, REWARDED_AD_UNIT_ID,
+    AD_BATCH_SIZE, AD_BATCH_COOLDOWN_SECS,
+    get_batch_state, check_cooldown, record_ad_complete as admob_record_complete,
+)
 
 app = Flask(__name__)
 app.secret_key = os.environ.get("SESSION_SECRET", "datacure-dev-secret-2024")
@@ -541,6 +547,7 @@ def rewards():
     ).fetchone()
     ads_today = ads_row["ads_watched"] if ads_row else 0
     user = get_user(uid)
+    batch = get_batch_state()
     return render_template(
         "rewards.html",
         user=user,
@@ -549,6 +556,13 @@ def rewards():
         max_ads=MAX_ADS_PER_DAY,
         ad_duration=AD_DURATION_SECS,
         csrf_token=session.get("csrf_token", ""),
+        ad_batch_size=AD_BATCH_SIZE,
+        ad_batch_cooldown=AD_BATCH_COOLDOWN_SECS,
+        batch_count=batch["batch_count"],
+        in_cooldown=batch["in_cooldown"],
+        cooldown_secs_left=batch["cooldown_secs_left"],
+        admob_test_mode=ADMOB_TEST_MODE,
+        rewarded_ad_unit_id=REWARDED_AD_UNIT_ID,
     )
 
 
@@ -576,6 +590,16 @@ def api_ad_start():
         log_event(db, EVENT_SPAM_ATTEMPT, "Ad start: bad CSRF", user_id=uid, ip=ip)
         return jsonify({"ok": False, "error": "Invalid request."}), 403
 
+    # ── Batch cooldown guard ───────────────────────────────────────────────
+    in_cooldown, secs_left = check_cooldown()
+    if in_cooldown:
+        return jsonify({
+            "ok":           False,
+            "reason":       "batch_cooldown",
+            "cooldown_secs": secs_left,
+            "error":        f"Batch cooldown active. Please wait {secs_left}s.",
+        }), 429
+
     today = date.today().isoformat()
     ads_row = db.execute(
         "SELECT ads_watched FROM ad_rewards WHERE user_id=? AND reward_date=?",
@@ -593,8 +617,17 @@ def api_ad_start():
     watch_token = secrets.token_hex(24)
     session["ad_token"]      = watch_token
     session["ad_token_time"] = time.time()
-    log_event(db, EVENT_AD_STARTED, f"Ad session started", user_id=uid, ip=ip)
-    return jsonify({"ok": True, "token": watch_token, "duration": AD_DURATION_SECS})
+    batch = get_batch_state()
+    log_event(db, EVENT_AD_STARTED,
+              f"Ad session started (batch {batch['batch_count']+1}/{AD_BATCH_SIZE})",
+              user_id=uid, ip=ip)
+    return jsonify({
+        "ok":          True,
+        "token":       watch_token,
+        "duration":    AD_DURATION_SECS,
+        "batch_pos":   batch["batch_count"] + 1,
+        "batch_size":  AD_BATCH_SIZE,
+    })
 
 
 @app.route("/x/ad/complete", methods=["POST"])
@@ -658,16 +691,25 @@ def api_ad_complete():
     new_ads_today = ads_today + 1
     remaining = max(0, MAX_ADS_PER_DAY - new_ads_today)
 
+    # ── Batch cooldown tracking ────────────────────────────────────────────
+    batch_result = admob_record_complete()
+
     log_event(db, EVENT_AD_COMPLETED,
-              f"Reward granted ({elapsed:.1f}s elapsed) ads_today={new_ads_today}",
+              f"Reward granted ({elapsed:.1f}s elapsed) ads_today={new_ads_today} "
+              f"batch={batch_result['ads_in_batch']}/{AD_BATCH_SIZE}"
+              f"{' → cooldown' if batch_result['cooldown_triggered'] else ''}",
               user_id=uid, ip=ip)
 
     return jsonify({
-        "ok":          True,
-        "new_coins":   COINS_PER_AD,
-        "total_coins": new_balance,
-        "ads_today":   new_ads_today,
-        "remaining":   remaining,
+        "ok":                  True,
+        "new_coins":           COINS_PER_AD,
+        "total_coins":         new_balance,
+        "ads_today":           new_ads_today,
+        "remaining":           remaining,
+        "batch_pos":           batch_result["ads_in_batch"],
+        "batch_size":          batch_result["batch_size"],
+        "cooldown_triggered":  batch_result["cooldown_triggered"],
+        "cooldown_secs":       batch_result["cooldown_secs"],
     })
 
 

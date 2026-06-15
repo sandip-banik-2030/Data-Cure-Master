@@ -1540,3 +1540,181 @@ body { overflow-x: hidden; max-width: 100vw; }
 .streak-bar-fill {
   transition: width 0.8s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   AdMob Integration Styles
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* ── AdMob Banner Slot (Datacure_Tab_Banner) ─────────────────────────────── */
+.admob-banner-slot {
+  width: 100%;
+  height: 50px;
+  background: linear-gradient(90deg, rgba(0,255,136,0.06), rgba(168,85,247,0.06));
+  border-top: 1px solid rgba(0,255,136,0.12);
+  border-bottom: 1px solid rgba(0,255,136,0.06);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  position: relative;
+  z-index: 10;
+  overflow: hidden;
+}
+.admob-banner-slot::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: repeating-linear-gradient(
+    90deg,
+    transparent,
+    transparent 60px,
+    rgba(0,255,136,0.03) 60px,
+    rgba(0,255,136,0.03) 61px
+  );
+}
+.admob-banner-inner {
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  color: rgba(0,255,136,0.45);
+  text-transform: uppercase;
+  position: relative;
+  z-index: 1;
+}
+
+/* ── Test mode badge ─────────────────────────────────────────────────────── */
+.admob-test-badge {
+  background: rgba(234,179,8,0.12);
+  border: 1px solid rgba(234,179,8,0.3);
+  border-radius: 8px;
+  padding: 0.4rem 0.75rem;
+  font-size: 0.75rem;
+  color: var(--yellow);
+  text-align: center;
+  margin-bottom: 0.75rem;
+}
+
+/* ── 5-Ad Batch Tracker ──────────────────────────────────────────────────── */
+.batch-tracker {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  justify-content: center;
+  margin-bottom: 1rem;
+}
+.batch-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: rgba(255,255,255,0.1);
+  border: 1.5px solid rgba(168,85,247,0.3);
+  transition: background 0.25s ease, border-color 0.25s ease, transform 0.2s ease;
+}
+.batch-dot-filled {
+  background: var(--purple);
+  border-color: var(--purple);
+  transform: scale(1.15);
+  box-shadow: 0 0 6px rgba(168,85,247,0.5);
+}
+.batch-label {
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  margin-left: 6px;
+  white-space: nowrap;
+}
+
+/* ── Page-level cooldown banner ──────────────────────────────────────────── */
+.cooldown-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  background: rgba(168,85,247,0.1);
+  border: 1px solid rgba(168,85,247,0.3);
+  border-radius: var(--radius);
+  padding: 0.875rem 1rem;
+  margin-top: 0.75rem;
+  text-align: left;
+}
+.cooldown-icon {
+  font-size: 1.4rem;
+  flex-shrink: 0;
+  line-height: 1;
+}
+.cooldown-text {
+  font-size: 0.82rem;
+  line-height: 1.5;
+  color: var(--text);
+}
+.cooldown-text strong { color: var(--purple); }
+
+/* ── Modal batch position pill ───────────────────────────────────────────── */
+.modal-batch-pill {
+  background: rgba(168,85,247,0.15);
+  border: 1px solid rgba(168,85,247,0.35);
+  border-radius: 100px;
+  padding: 0.2rem 0.75rem;
+  font-size: 0.72rem;
+  color: var(--purple);
+  font-weight: 600;
+  margin-bottom: 0.75rem;
+  letter-spacing: 0.03em;
+}
+
+/* ── Modal batch result banner ───────────────────────────────────────────── */
+.modal-batch-banner {
+  background: rgba(0,255,136,0.08);
+  border: 1px solid rgba(0,255,136,0.2);
+  border-radius: 8px;
+  padding: 0.4rem 0.875rem;
+  font-size: 0.78rem;
+  color: var(--green);
+  margin-top: 0.5rem;
+  text-align: center;
+}
+.batch-banner-cooldown {
+  background: rgba(168,85,247,0.1);
+  border-color: rgba(168,85,247,0.3);
+  color: var(--purple);
+}
+
+/* ── Fullscreen cooldown modal state ─────────────────────────────────────── */
+.cooldown-modal-state {
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 0.5rem;
+}
+.cooldown-modal-icon   { font-size: 2.5rem; }
+.cooldown-modal-heading {
+  font-size: 1.3rem;
+  font-weight: 800;
+  color: var(--purple);
+  margin-top: 0.25rem;
+}
+.cooldown-modal-sub {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+.cooldown-modal-timer {
+  position: relative;
+  margin: 0.5rem 0;
+}
+.cooldown-modal-secs {
+  position: absolute;
+  top: 50%; left: 50%;
+  transform: translate(-50%, -50%);
+  font-size: 1.5rem;
+  font-weight: 800;
+  font-family: var(--mono);
+  color: var(--purple);
+}
+.cooldown-modal-note {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  margin-top: 0.25rem;
+}
+
+/* ── AdMob unit info collapsible ─────────────────────────────────────────── */
+.admob-details summary::-webkit-details-marker { display: none; }
+.admob-details summary::marker { display: none; }
