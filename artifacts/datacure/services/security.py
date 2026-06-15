@@ -17,6 +17,8 @@ EVENT_ADMIN_ACTION    = "admin_action"
 EVENT_RATE_LIMITED    = "rate_limited"
 EVENT_SPAM_ATTEMPT    = "spam_attempt"
 EVENT_INVALID_TOKEN   = "invalid_token"
+EVENT_DATA_CAP_HIT    = "data_cap_hit"
+EVENT_DATA_DUPE       = "data_dupe_submit"
 
 
 def log_event(db, event_type: str, details: str = "",

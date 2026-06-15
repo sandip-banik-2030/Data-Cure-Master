@@ -7,6 +7,19 @@
   <p class="page-sub">Track your savings and earn coins instantly</p>
 </div>
 
+<!-- Daily Cap Banner (shown when 2000 MB already reached today) -->
+{% if daily_cap_hit %}
+<div class="alert alert-warning daily-cap-banner" style="margin-bottom:1rem;">
+  <strong>🚫 Daily limit reached!</strong>
+  You've logged {{ daily_cap_mb }} MB today — the maximum allowed per 24-hour cycle.
+  Come back tomorrow to keep earning.
+</div>
+{% elif remaining_mb < 500 %}
+<div class="alert alert-warning" style="margin-bottom:1rem; font-size:0.82rem;">
+  ⚠️ Only <strong>{{ remaining_mb }} MB</strong> remaining in your daily cap ({{ daily_cap_mb }} MB/day).
+</div>
+{% endif %}
+
 <!-- Today's Progress Toward Target -->
 <div class="today-progress-card">
   <div class="today-progress-header">
@@ -46,25 +59,42 @@
       <div id="success-target-banner" class="success-target-banner" style="display:none;">
         🎯 Daily target hit! +{{ target_bonus_coins }} bonus coins!
       </div>
-      <button class="btn btn-primary" onclick="resetForm()" style="margin-top:1.25rem;">Log More</button>
+      <button class="btn btn-primary" id="log-more-btn" onclick="resetForm()" style="margin-top:1.25rem;">Log More</button>
+    </div>
+
+    <!-- Daily Cap Overlay (shown when user hits the 2000 MB wall) -->
+    <div id="cap-overlay" class="success-overlay" style="display:{% if daily_cap_hit %}flex{% else %}none{% endif %};">
+      <div class="success-icon">🚫</div>
+      <div class="success-heading" style="color:var(--yellow);">Daily Limit Reached</div>
+      <div class="success-sub">You've logged <strong id="cap-total-mb">{{ today_data_saved }}</strong> MB today.</div>
+      <div class="success-sub text-muted" style="margin-top:0.25rem;">Max {{ daily_cap_mb }} MB per 24-hour cycle.</div>
+      <div class="success-total" style="margin-top:0.5rem;">Resets at midnight · Come back tomorrow!</div>
     </div>
 
     <div id="error-banner" class="alert alert-error" style="display:none;"></div>
 
-    <div id="log-form-wrap">
+    <div id="log-form-wrap" {% if daily_cap_hit %}style="display:none;"{% endif %}>
       <div class="form-group">
-        <label for="mb_input">Data Saved (MB)</label>
+        <label for="mb_input">Data Saved (MB)
+          <span class="cap-remaining-hint" id="cap-hint">
+            — <span id="remaining-display">{{ remaining_mb }}</span> MB remaining today
+          </span>
+        </label>
         <div class="slider-wrap">
-          <input type="range" id="mb_slider" min="0" max="1000" step="1" value="0"
+          <input type="range" id="mb_slider" min="0" max="{{ [remaining_mb, 1000]|min }}" step="1" value="0"
                  class="mb-slider" oninput="syncFromSlider(this.value)" />
-          <div class="slider-labels"><span>0</span><span>500</span><span>1000</span></div>
+          <div class="slider-labels">
+            <span>0</span>
+            <span>{{ ([remaining_mb, 1000]|min) // 2 }}</span>
+            <span>{{ [remaining_mb, 1000]|min }}</span>
+          </div>
         </div>
         <div class="input-with-unit" style="margin-top:0.75rem;">
-          <input type="number" id="mb_input" min="1" max="2000" step="1"
-                 placeholder="1 – 2000" oninput="syncFromInput(this.value)" />
+          <input type="number" id="mb_input" min="1" max="{{ remaining_mb }}" step="1"
+                 placeholder="1 – {{ remaining_mb }}" oninput="syncFromInput(this.value)" />
           <span class="input-unit">MB</span>
         </div>
-        <small class="field-hint">1–2000 MB · Floor division per 100 MB</small>
+        <small class="field-hint">Floor division per 100 MB · Daily cap: {{ daily_cap_mb }} MB</small>
       </div>
 
       <div class="coin-preview" id="coin-preview" style="display:none;">
@@ -78,7 +108,7 @@
         <span id="log-btn-text">Log &amp; Earn Coins</span>
         <span id="log-spinner" class="btn-spinner" style="display:none;"></span>
       </button>
-      <p class="submit-note">Coins calculated server-side after submission</p>
+      <p class="submit-note">Coins calculated server-side · Spam protection active</p>
     </div>
   </div>
 
@@ -104,11 +134,36 @@
       <p class="balance-sub">≈ ₹{{ "%.2f"|format(user['coins'] / 100) }}</p>
     </div>
 
+    <!-- Daily Cap Progress -->
+    <div class="card info-card" style="margin-top:1rem;">
+      <h3 class="info-title">Daily Cap Usage</h3>
+      <div class="target-mini-display">
+        <div class="target-mini-val">
+          <span id="log-side-today">{{ today_data_saved }}</span> / {{ daily_cap_mb }} MB
+        </div>
+        <div class="target-bar-track" style="margin-top:0.5rem;">
+          <div class="target-bar-fill {% if daily_cap_hit %}target-bar-done{% endif %}"
+               id="log-cap-bar"
+               style="width:{{ [(today_data_saved / daily_cap_mb * 100)|round|int, 100]|min }}%;
+                      background: {% if daily_cap_hit %}var(--yellow){% else %}linear-gradient(90deg, var(--green), var(--purple)){% endif %}">
+          </div>
+        </div>
+        <div class="streak-meta" style="margin-top:0.3rem;">
+          <span id="cap-bar-label">
+            {% if daily_cap_hit %}<span style="color:var(--yellow);">Limit reached</span>
+            {% else %}<span id="remaining-side">{{ remaining_mb }} MB remaining</span>
+            {% endif %}
+          </span>
+          <span>resets midnight</span>
+        </div>
+      </div>
+    </div>
+
     <div class="card info-card" style="margin-top:1rem;">
       <h3 class="info-title">Today's Target</h3>
       <div class="target-mini-display">
         <div class="target-mini-val">
-          <span id="log-side-today">{{ today_data_saved }}</span> / {{ daily_target }} MB
+          <span id="log-side-target">{{ today_data_saved }}</span> / {{ daily_target }} MB
         </div>
         <div class="target-bar-track" style="margin-top:0.5rem;">
           <div class="target-bar-fill" id="log-side-bar" style="width:{{ target_pct }}%"></div>
@@ -121,13 +176,16 @@
 {% endblock %}
 {% block scripts %}
 <script>
-const COINS_PER_100MB = {{ coins_per_100mb }};
-const MB_PER_REWARD   = {{ mb_per_reward }};
-const DAILY_TARGET    = {{ daily_target }};
-const TARGET_BONUS    = {{ target_bonus_coins }};
-let submitToken       = "{{ submit_token }}";
-let submitting        = false;
-let todaySaved        = {{ today_data_saved }};
+const COINS_PER_100MB  = {{ coins_per_100mb }};
+const MB_PER_REWARD    = {{ mb_per_reward }};
+const DAILY_TARGET     = {{ daily_target }};
+const TARGET_BONUS     = {{ target_bonus_coins }};
+const DAILY_CAP_MB     = {{ daily_cap_mb }};
+let submitToken        = "{{ submit_token }}";
+let submitting         = false;
+let todaySaved         = {{ today_data_saved }};
+let remainingMb        = {{ remaining_mb }};
+let dailyCapHit        = {{ 'true' if daily_cap_hit else 'false' }};
 
 const MOTIVATIONAL = [
   "Every MB saved is a step forward! 💪",
@@ -153,44 +211,58 @@ function syncFromSlider(val) {
 function syncFromInput(val) {
   const n = parseInt(val) || 0;
   const slider = document.getElementById('mb_slider');
-  slider.value = Math.min(n, 1000);
+  slider.value = Math.min(n, parseInt(slider.max));
   updateSliderFill(slider);
   updatePreview(n);
 }
 
 function updatePreview(mb) {
-  const preview = document.getElementById('coin-preview');
+  const preview   = document.getElementById('coin-preview');
   const previewVal = document.getElementById('preview-coins');
-  const note = document.getElementById('preview-note');
-  const btn = document.getElementById('log-btn');
-  if (mb > 0 && mb <= 2000) {
+  const note      = document.getElementById('preview-note');
+  const btn       = document.getElementById('log-btn');
+
+  // Enforce the remaining daily cap on the client side too
+  const maxAllowed = remainingMb;
+  if (mb > 0 && mb <= maxAllowed) {
     const coins = Math.floor(mb / MB_PER_REWARD) * COINS_PER_100MB;
     const leftover = mb % 100;
     const newTotal = todaySaved + mb;
     const willHitTarget = DAILY_TARGET > 0 && todaySaved < DAILY_TARGET && newTotal >= DAILY_TARGET;
+    const willHitCap    = newTotal >= DAILY_CAP_MB;
     preview.style.display = 'flex';
     previewVal.textContent = coins;
     let noteText = leftover > 0 ? `(${leftover} MB remainder ignored)` : '';
     if (willHitTarget) noteText += (noteText ? ' · ' : '') + `🎯 +${TARGET_BONUS} target bonus!`;
+    if (willHitCap)    noteText += (noteText ? ' · ' : '') + `⚠️ Hits daily cap`;
     note.textContent = noteText;
     btn.disabled = false;
+  } else if (mb > maxAllowed) {
+    // Client-side feedback: value exceeds today's remaining allowance
+    preview.style.display = 'none';
+    btn.disabled = true;
+    showError(`Only ${maxAllowed} MB remaining today. Max allowed per day: ${DAILY_CAP_MB} MB.`);
   } else {
     preview.style.display = 'none';
     btn.disabled = true;
+    document.getElementById('error-banner').style.display = 'none';
   }
 }
 
 function submitLog() {
-  if (submitting) return;
-  const mb = parseInt(document.getElementById('mb_input').value);
+  if (submitting || dailyCapHit) return;
+  const mb  = parseInt(document.getElementById('mb_input').value);
   const err = document.getElementById('error-banner');
   err.style.display = 'none';
 
   if (!mb || mb < 1) { showError('Enter at least 1 MB.'); return; }
-  if (mb > 2000)     { showError('Maximum is 2000 MB per submission.'); return; }
+  if (mb > remainingMb) {
+    showError(`Only ${remainingMb} MB remaining today. Daily cap: ${DAILY_CAP_MB} MB.`);
+    return;
+  }
 
   submitting = true;
-  const btn = document.getElementById('log-btn');
+  const btn     = document.getElementById('log-btn');
   const btnText = document.getElementById('log-btn-text');
   const spinner = document.getElementById('log-spinner');
   btn.disabled = true;
@@ -206,17 +278,43 @@ function submitLog() {
   .then(data => {
     submitting = false;
     spinner.style.display = 'none';
-    if (data.success) {
+
+    // Always rotate the token if the server issued a new one
+    if (data.next_token) {
       submitToken = data.next_token;
+    }
+
+    if (data.success) {
       todaySaved  = data.today_data_saved;
+      remainingMb = data.remaining_mb !== undefined ? data.remaining_mb : Math.max(0, DAILY_CAP_MB - todaySaved);
       updateCoinDisplays(data.total_coins);
       document.getElementById('side-balance').textContent = data.total_coins;
       updateProgressBars(data.today_data_saved, data.daily_target, data.target_pct);
+      updateCapBar(data.today_data_saved, data.remaining_mb);
       showSuccess(data.new_coins, data.total_coins, mb, data.target_hit, data.target_bonus);
+
+      // If this submission hit the cap, show the cap overlay on next reset
+      if (data.daily_cap_hit) {
+        dailyCapHit = true;
+        updateCapBar(data.today_data_saved, 0);
+      }
     } else {
-      btn.disabled = false;
-      btnText.textContent = 'Log & Earn Coins';
-      showError(data.error || 'Something went wrong.');
+      // Server rejected — re-enable button unless the daily cap was actually hit
+      if (data.daily_cap_hit) {
+        dailyCapHit = true;
+        showCapOverlay(data.today_data_saved || todaySaved);
+        showToast(data.error || 'Daily limit reached!', 'error', 5000);
+        updateCapBar(data.today_data_saved || todaySaved, 0);
+      } else {
+        btn.disabled = false;
+        btnText.textContent = 'Log & Earn Coins';
+        showError(data.error || 'Something went wrong.');
+        // Update remaining if server told us
+        if (data.remaining_mb !== undefined) {
+          remainingMb = data.remaining_mb;
+          updateRemainingHint(data.remaining_mb);
+        }
+      }
     }
   })
   .catch(() => {
@@ -228,14 +326,45 @@ function submitLog() {
   });
 }
 
+function updateCapBar(saved, remaining) {
+  const bar   = document.getElementById('log-cap-bar');
+  const label = document.getElementById('remaining-side');
+  const sideEl = document.getElementById('log-side-today');
+  const pct   = Math.min(100, Math.round((saved / DAILY_CAP_MB) * 100));
+  if (bar) {
+    bar.style.width = pct + '%';
+    if (pct >= 100) bar.style.background = 'var(--yellow)';
+  }
+  if (label) label.textContent = remaining > 0 ? `${remaining} MB remaining` : 'Limit reached';
+  if (sideEl) sideEl.textContent = saved;
+  updateRemainingHint(remaining);
+}
+
+function updateRemainingHint(remaining) {
+  const hint = document.getElementById('remaining-display');
+  if (hint) hint.textContent = remaining;
+  const input = document.getElementById('mb_input');
+  if (input) input.max = remaining;
+  const slider = document.getElementById('mb_slider');
+  if (slider) slider.max = Math.min(remaining, 1000);
+}
+
+function showCapOverlay(totalMb) {
+  const overlay = document.getElementById('cap-overlay');
+  const form    = document.getElementById('log-form-wrap');
+  const capMbEl = document.getElementById('cap-total-mb');
+  if (capMbEl) capMbEl.textContent = totalMb;
+  if (overlay) overlay.style.display = 'flex';
+  if (form)    form.style.display    = 'none';
+}
+
 function updateProgressBars(saved, target, pct) {
-  const bars = ['log-target-bar', 'log-side-bar'];
-  bars.forEach(id => {
+  ['log-target-bar', 'log-side-bar'].forEach(id => {
     const el = document.getElementById(id);
     if (el) { el.style.width = pct + '%'; if (pct >= 100) el.classList.add('target-bar-done'); }
   });
   const todayEl = document.getElementById('log-today-saved');
-  const sideEl  = document.getElementById('log-side-today');
+  const sideEl  = document.getElementById('log-side-target');
   if (todayEl) todayEl.textContent = saved;
   if (sideEl)  sideEl.textContent  = saved;
   const pctEl = document.getElementById('log-target-pct');
@@ -253,14 +382,11 @@ function showError(msg) {
 }
 
 function showSuccess(newCoins, totalCoins, mb, targetHit, targetBonus) {
-  const icon = newCoins > 0 ? '🪙' : '📶';
   const motivational = MOTIVATIONAL[Math.floor(Math.random() * MOTIVATIONAL.length)];
-
-  document.getElementById('success-icon').textContent = newCoins > 0 ? '🪙' : '📶';
+  document.getElementById('success-icon').textContent    = newCoins > 0 ? '🪙' : '📶';
   document.getElementById('success-heading').textContent = newCoins > 0
-    ? `+${newCoins} Coins Earned!`
-    : `${mb} MB Logged!`;
-  document.getElementById('success-msg').textContent = motivational;
+    ? `+${newCoins} Coins Earned!` : `${mb} MB Logged!`;
+  document.getElementById('success-msg').textContent     = motivational;
   document.getElementById('success-total-val').textContent = totalCoins;
 
   const banner = document.getElementById('success-target-banner');
@@ -270,21 +396,28 @@ function showSuccess(newCoins, totalCoins, mb, targetHit, targetBonus) {
   } else {
     banner.style.display = 'none';
   }
-
   if (newCoins > 0) showToast(`+${newCoins} coins earned for ${mb} MB saved!`, 'success');
 
+  // Hide "Log More" button if daily cap is now hit
+  const logMoreBtn = document.getElementById('log-more-btn');
+  if (logMoreBtn && dailyCapHit) logMoreBtn.style.display = 'none';
+
   document.getElementById('success-overlay').style.display = 'flex';
-  document.getElementById('log-form-wrap').style.display = 'none';
+  document.getElementById('log-form-wrap').style.display   = 'none';
   pulseWallet();
 }
 
 function resetForm() {
+  if (dailyCapHit) { showCapOverlay(todaySaved); return; }
   document.getElementById('success-overlay').style.display = 'none';
-  document.getElementById('log-form-wrap').style.display = 'block';
-  document.getElementById('mb_input').value = '';
-  document.getElementById('mb_slider').value = 0;
-  updateSliderFill(document.getElementById('mb_slider'));
+  document.getElementById('log-form-wrap').style.display   = 'block';
+  document.getElementById('mb_input').value  = '';
+  const slider = document.getElementById('mb_slider');
+  slider.value = 0;
+  slider.max   = Math.min(remainingMb, 1000);
+  updateSliderFill(slider);
   document.getElementById('coin-preview').style.display = 'none';
+  document.getElementById('error-banner').style.display = 'none';
   const btn     = document.getElementById('log-btn');
   const btnText = document.getElementById('log-btn-text');
   btn.disabled = true;
@@ -293,6 +426,10 @@ function resetForm() {
 
 document.addEventListener('DOMContentLoaded', function() {
   updateSliderFill(document.getElementById('mb_slider'));
+  if (dailyCapHit) {
+    document.getElementById('log-btn').disabled = true;
+    document.getElementById('log-btn').title    = 'Daily 2000 MB cap reached';
+  }
 });
 </script>
 {% endblock %}

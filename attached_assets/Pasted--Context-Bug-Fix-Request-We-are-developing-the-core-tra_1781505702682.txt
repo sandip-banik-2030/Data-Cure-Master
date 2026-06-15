@@ -1,0 +1,24 @@
+# Context & Bug Fix Request
+We are developing the core transaction and logging logic for my Python application, "Datacure". Right now, there is a massive security loophole in our user flow:
+1. Users can manually input extreme values (like 2000 MB) repeatedly.
+2. The "Log & Earn Coins" button can be spammed an endless number of times per day.
+3. The system continuously rewards coins and streak bonuses without any daily ceiling or time-gate restrictions, as seen in the recent transactions log.
+
+We must implement strict server-side validation and anti-cheat tracking rules to protect our application's economy.
+
+# Core Security Requirements
+
+## 1. Absolute Daily Cap on Data Logging
+- Implement a global daily restriction per user profile: A user is strictly capped at logging a maximum of **2000 MB total per 24-hour cycle** (resetting at midnight local time or via a sliding window).
+- If a user has already logged 500 MB earlier today, the maximum they should be permitted to log for the remainder of the day is 1500 MB. 
+
+## 2. Button Spam Protection & Validation
+- Before executing the `Log & Earn Coins` logic backend, the server must validate the user's total logged data for the current day.
+- If the current submission pushes their daily total past 2000 MB, reject the transaction, throw a clean error toast/notification (e.g., "Daily limit of 2000 MB reached! Try again tomorrow."), and keep the database balance unchanged.
+- Dynamically update the frontend: Once a user hits 2000 MB for the day, change the status of the "Log & Earn Coins" button to `disabled` and update the "TODAY'S TARGET" tracker to read `200 / 200 MB` (or show it fully capped out).
+
+## 3. Safe Database Transaction Controls
+- Ensure all insertions into the transaction history collection check for timestamp duplicates within the same minute or enforce a strict database lock during computation to completely mitigate network spam-clicking.
+
+# Output Request
+Please provide the updated Python backend logic (and state management code) to enforce these caps securely. Keep the logic robust and thoroughly commented.

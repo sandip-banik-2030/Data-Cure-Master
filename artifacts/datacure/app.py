@@ -25,7 +25,7 @@ from services.security import (
     EVENT_AD_STARTED, EVENT_AD_COMPLETED, EVENT_AD_ABORTED,
     EVENT_AD_DUPLICATE, EVENT_AD_TOO_FAST, EVENT_AD_DAILY_LIMIT,
     EVENT_ADMIN_ACTION, EVENT_RATE_LIMITED, EVENT_SPAM_ATTEMPT,
-    EVENT_INVALID_TOKEN,
+    EVENT_INVALID_TOKEN, EVENT_DATA_CAP_HIT, EVENT_DATA_DUPE,
 )
 
 app = Flask(__name__)
@@ -48,6 +48,7 @@ OPERATORS           = ["Jio", "Airtel", "Vi", "BSNL"]
 ACTIVE_STATUSES     = ("pending", "processing")
 TARGET_BONUS_COINS  = 20
 MAX_DATA_TARGET_MB  = 1000
+DAILY_DATA_CAP_MB   = 2000   # Hard ceiling on data logged per user per day
 AD_DURATION_SECS    = 15
 
 
@@ -145,6 +146,11 @@ def _check_target_bonus(db, user_id: int, today_saved: int, today: str) -> dict:
     db.execute("UPDATE users SET target_bonus_date=? WHERE id=?", (today, user_id))
     db.commit()
     return {"hit": True, "bonus": TARGET_BONUS_COINS, "target": target}
+
+
+def _reissue_log_token():
+    """Rotate the session log token so the next submission can proceed."""
+    session["log_token"] = secrets.token_hex(16)
 
 
 # ── Routes: Root ───────────────────────────────────────────────────────────────
@@ -312,6 +318,8 @@ def log_data():
     user = get_user(uid)
     daily_target = user["daily_data_target"] if user["daily_data_target"] else 200
     target_pct   = min(100, round((today_data_saved / daily_target) * 100)) if daily_target > 0 else 0
+    remaining_mb = max(0, DAILY_DATA_CAP_MB - today_data_saved)
+    daily_cap_hit = today_data_saved >= DAILY_DATA_CAP_MB
     return render_template(
         "log_data.html",
         coins_per_100mb=COINS_PER_100MB,
@@ -323,6 +331,9 @@ def log_data():
         target_pct=target_pct,
         target_bonus_coins=TARGET_BONUS_COINS,
         max_data_target=MAX_DATA_TARGET_MB,
+        daily_cap_mb=DAILY_DATA_CAP_MB,
+        remaining_mb=remaining_mb,
+        daily_cap_hit=daily_cap_hit,
     )
 
 
@@ -333,33 +344,103 @@ def api_log_data():
     data    = request.get_json(silent=True) or {}
     token   = data.get("token", "")
     user_id = session["user_id"]
+    ip      = request.remote_addr
 
+    # ── 1. Token guard: prevents replay and double-submit ──────────────────
     if not token or token != session.get("log_token"):
+        log_event(get_db(), EVENT_INVALID_TOKEN,
+                  "log-data: invalid/reused token", user_id=user_id, ip=ip)
         return jsonify({"success": False, "error": "Duplicate or invalid submission."}), 400
     session.pop("log_token", None)
 
+    # ── 2. Basic input validation ──────────────────────────────────────────
     raw_mb = data.get("mb_saved")
     try:
         mb_saved = int(raw_mb)
     except (TypeError, ValueError):
-        return jsonify({"success": False, "error": "MB value must be a whole number."}), 400
+        _reissue_log_token()
+        return jsonify({"success": False, "error": "MB value must be a whole number.",
+                        "next_token": session.get("log_token")}), 400
 
     if mb_saved < 1:
-        return jsonify({"success": False, "error": "Value must be at least 1 MB."}), 400
-    if mb_saved > 2000:
-        return jsonify({"success": False, "error": "Maximum is 2000 MB per submission."}), 400
+        _reissue_log_token()
+        return jsonify({"success": False, "error": "Value must be at least 1 MB.",
+                        "next_token": session.get("log_token")}), 400
+    if mb_saved > DAILY_DATA_CAP_MB:
+        _reissue_log_token()
+        return jsonify({"success": False,
+                        "error": f"Maximum is {DAILY_DATA_CAP_MB} MB per submission.",
+                        "next_token": session.get("log_token")}), 400
 
-    coins_earned = math.floor(mb_saved / 100) * COINS_PER_100MB
     db    = get_db()
     today = date.today().isoformat()
 
-    # Sync and update today's data
+    # ── 3. Daily cap check (server-authoritative) ──────────────────────────
+    # Read the authoritative today_data_saved from the DB (not the client).
     today_before = _sync_today_data(db, user_id, today)
-    today_after  = today_before + mb_saved
+    remaining_mb = DAILY_DATA_CAP_MB - today_before
 
+    if remaining_mb <= 0:
+        # User already hit 2000 MB today — log the abuse attempt and reject.
+        log_event(db, EVENT_DATA_CAP_HIT,
+                  f"log-data: daily cap already reached (today={today_before} MB)",
+                  user_id=user_id, ip=ip)
+        _reissue_log_token()
+        return jsonify({
+            "success":          False,
+            "error":            "Daily limit of 2000 MB reached! Try again tomorrow.",
+            "daily_cap_hit":    True,
+            "today_data_saved": today_before,
+            "remaining_mb":     0,
+            "next_token":       session.get("log_token"),
+        }), 429
+
+    if today_before + mb_saved > DAILY_DATA_CAP_MB:
+        # Submission would overshoot the cap — tell user the exact headroom.
+        _reissue_log_token()
+        return jsonify({
+            "success":       False,
+            "error":         f"Only {remaining_mb} MB remaining for today. Reduce your entry.",
+            "remaining_mb":  remaining_mb,
+            "daily_cap_hit": False,
+            "next_token":    session.get("log_token"),
+        }), 400
+
+    # ── 4. Minute-level duplicate guard ────────────────────────────────────
+    # Prevents a burst of concurrent requests that all pass the token check
+    # before the first write completes (e.g., two tabs submitting at once).
+    recent_dup = db.execute(
+        """SELECT id FROM transactions
+           WHERE user_id = ?
+             AND description LIKE 'Logged % MB saved'
+             AND created_at > datetime('now', '-60 seconds')
+           LIMIT 1""",
+        (user_id,),
+    ).fetchone()
+    if recent_dup:
+        log_event(db, EVENT_DATA_DUPE,
+                  "log-data: submission within 60s of previous",
+                  user_id=user_id, ip=ip)
+        _reissue_log_token()
+        return jsonify({
+            "success":    False,
+            "error":      "Please wait 60 seconds before logging again.",
+            "next_token": session.get("log_token"),
+        }), 429
+
+    # ── 5. All checks passed — compute coins and persist ───────────────────
+    today_after  = today_before + mb_saved
+    coins_earned = math.floor(mb_saved / 100) * COINS_PER_100MB
+
+    # Write today_saved + lifetime together; also stamp last_data_date so
+    # the daily-reset logic in _sync_today_data works correctly next day.
     db.execute(
-        "UPDATE users SET lifetime_data_saved = lifetime_data_saved + ?, today_data_saved = ? WHERE id=?",
-        (mb_saved, today_after, user_id),
+        """UPDATE users
+           SET lifetime_data_saved = lifetime_data_saved + ?,
+               today_data_saved    = ?,
+               last_data_date      = ?
+           WHERE id = ?""",
+        (mb_saved, today_after, today, user_id),
     )
 
     new_balance = get_balance(db, user_id)
@@ -368,16 +449,18 @@ def api_log_data():
     else:
         db.commit()
 
-    # Check if daily target was just hit
+    # ── 6. Check daily target bonus ────────────────────────────────────────
     target_result = _check_target_bonus(db, user_id, today_after, today)
     if target_result.get("bonus", 0) > 0:
         new_balance = get_balance(db, user_id)
 
-    new_token = secrets.token_hex(16)
-    session["log_token"] = new_token
+    # ── 7. Issue next token ────────────────────────────────────────────────
+    _reissue_log_token()
+    new_token = session["log_token"]
 
     user = get_user(user_id)
-    daily_target = user["daily_data_target"] if user["daily_data_target"] else 200
+    daily_target     = user["daily_data_target"] if user["daily_data_target"] else 200
+    remaining_after  = max(0, DAILY_DATA_CAP_MB - today_after)
 
     return jsonify({
         "success":          True,
@@ -390,6 +473,8 @@ def api_log_data():
         "target_hit":       target_result.get("hit", False),
         "target_bonus":     target_result.get("bonus", 0),
         "target_pct":       min(100, round((today_after / daily_target) * 100)) if daily_target > 0 else 0,
+        "daily_cap_hit":    today_after >= DAILY_DATA_CAP_MB,
+        "remaining_mb":     remaining_after,
     })
 
 
