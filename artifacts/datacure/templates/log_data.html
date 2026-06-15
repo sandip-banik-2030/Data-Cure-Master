@@ -7,7 +7,7 @@
   <p class="page-sub">Track your savings and earn coins instantly</p>
 </div>
 
-<!-- Daily Cap Banner (shown when 2000 MB already reached today) -->
+<!-- Daily Cap Banner (shown when 500 MB already reached today) -->
 {% if daily_cap_hit %}
 <div class="alert alert-warning daily-cap-banner" style="margin-bottom:1rem;">
   <strong>🚫 Daily limit reached!</strong>
@@ -62,7 +62,7 @@
       <button class="btn btn-primary" id="log-more-btn" onclick="resetForm()" style="margin-top:1.25rem;">Log More</button>
     </div>
 
-    <!-- Daily Cap Overlay (shown when user hits the 2000 MB wall) -->
+    <!-- Daily Cap Overlay (shown when user hits the 500 MB daily ceiling) -->
     <div id="cap-overlay" class="success-overlay" style="display:{% if daily_cap_hit %}flex{% else %}none{% endif %};">
       <div class="success-icon">🚫</div>
       <div class="success-heading" style="color:var(--yellow);">Daily Limit Reached</div>
@@ -81,12 +81,12 @@
           </span>
         </label>
         <div class="slider-wrap">
-          <input type="range" id="mb_slider" min="0" max="{{ [remaining_mb, 1000]|min }}" step="1" value="0"
+          <input type="range" id="mb_slider" min="0" max="{{ [remaining_mb, 500]|min }}" step="1" value="0"
                  class="mb-slider" oninput="syncFromSlider(this.value)" />
           <div class="slider-labels">
             <span>0</span>
-            <span>{{ ([remaining_mb, 1000]|min) // 2 }}</span>
-            <span>{{ [remaining_mb, 1000]|min }}</span>
+            <span>{{ ([remaining_mb, 500]|min) // 2 }}</span>
+            <span>{{ [remaining_mb, 500]|min }}</span>
           </div>
         </div>
         <div class="input-with-unit" style="margin-top:0.75rem;">
@@ -116,7 +116,7 @@
     <div class="card info-card">
       <h3 class="info-title">Coin Rates</h3>
       <div class="calc-table">
-        {% for mb, coins in [(100, coins_per_100mb), (200, coins_per_100mb*2), (500, coins_per_100mb*5), (1000, coins_per_100mb*10), (2000, coins_per_100mb*20)] %}
+        {% for mb, coins in [(100, coins_per_100mb), (200, coins_per_100mb*2), (300, coins_per_100mb*3), (400, coins_per_100mb*4), (500, coins_per_100mb*5)] %}
         <div class="calc-row">
           <span>{{ mb }} MB</span><span class="calc-val text-green">{{ coins }} coins</span>
         </div>
@@ -428,7 +428,7 @@ document.addEventListener('DOMContentLoaded', function() {
   updateSliderFill(document.getElementById('mb_slider'));
   if (dailyCapHit) {
     document.getElementById('log-btn').disabled = true;
-    document.getElementById('log-btn').title    = 'Daily 2000 MB cap reached';
+    document.getElementById('log-btn').title    = `Daily ${DAILY_CAP_MB} MB cap reached`;
   }
 });
 </script>

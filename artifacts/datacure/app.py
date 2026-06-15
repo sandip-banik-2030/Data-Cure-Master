@@ -47,8 +47,8 @@ RECHARGE_PACK_INFO  = {
 OPERATORS           = ["Jio", "Airtel", "Vi", "BSNL"]
 ACTIVE_STATUSES     = ("pending", "processing")
 TARGET_BONUS_COINS  = 20
-MAX_DATA_TARGET_MB  = 1000
-DAILY_DATA_CAP_MB   = 2000   # Hard ceiling on data logged per user per day
+MAX_DATA_TARGET_MB  = 500    # User-set daily target cannot exceed the hard cap
+DAILY_DATA_CAP_MB   = 500    # Hard ceiling on data logged per user per day
 AD_DURATION_SECS    = 15
 
 
