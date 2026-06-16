@@ -265,11 +265,10 @@ def dashboard():
     today = date.today().isoformat()
 
     streak_info = update_streak(db, uid)
-    user = get_user(uid)
 
-    # Sync today's data (resets if new day)
+    # Sync today's data (resets if new day), then fetch user once
     today_data_saved = _sync_today_data(db, uid, today)
-    user = get_user(uid)  # re-fetch after possible reset
+    user = get_user(uid)
 
     ads_row   = db.execute(
         "SELECT ads_watched FROM ad_rewards WHERE user_id=? AND reward_date=?",
@@ -751,6 +750,11 @@ def redeem():
     ).fetchone()
 
     if request.method == "POST":
+        # CSRF validation
+        if request.form.get("csrf_token") != session.get("csrf_token"):
+            flash("Security token mismatch. Please try again.", "error")
+            return redirect(url_for("redeem"), 303)
+
         # Block duplicate requests
         if active:
             flash("You already have a pending or processing request. Wait for it to be resolved.", "error")
@@ -932,7 +936,24 @@ def admin_request_action(req_id, action):
     if action not in ("complete", "fail", "processing"):
         return redirect(url_for("admin"), 303)
     db = get_db()
+    req = db.execute(
+        "SELECT id, user_id, coins_used, status FROM recharge_requests WHERE id=?",
+        (req_id,),
+    ).fetchone()
+    if not req:
+        flash("Request not found.", "error")
+        return redirect(url_for("admin"), 303)
+
     status = {"complete": "completed", "fail": "failed", "processing": "processing"}[action]
+
+    # Refund coins when marking as failed (only if not already failed)
+    if status == "failed" and req["status"] != "failed":
+        try:
+            add_coins(db, req["user_id"], req["coins_used"],
+                      f"Refund for failed recharge request #{req_id}")
+        except WalletError:
+            pass  # user may be deleted; log and continue
+
     db.execute("UPDATE recharge_requests SET status=? WHERE id=?", (status, req_id))
     db.commit()
     log_event(db, EVENT_ADMIN_ACTION,
@@ -952,9 +973,21 @@ def admin_status_ajax():
     if not req_id or new_status not in valid:
         return jsonify({"ok": False, "error": "Invalid parameters"}), 400
     db = get_db()
-    row = db.execute("SELECT id FROM recharge_requests WHERE id=?", (req_id,)).fetchone()
+    row = db.execute(
+        "SELECT id, user_id, coins_used, status FROM recharge_requests WHERE id=?",
+        (req_id,),
+    ).fetchone()
     if not row:
         return jsonify({"ok": False, "error": "Request not found"}), 404
+
+    # Refund coins when marking as failed (only if not already failed)
+    if new_status == "failed" and row["status"] != "failed":
+        try:
+            add_coins(db, row["user_id"], row["coins_used"],
+                      f"Refund for failed recharge request #{req_id}")
+        except WalletError:
+            pass  # user may be deleted; continue with status update
+
     db.execute("UPDATE recharge_requests SET status=? WHERE id=?", (new_status, req_id))
     db.commit()
     log_event(db, EVENT_ADMIN_ACTION,

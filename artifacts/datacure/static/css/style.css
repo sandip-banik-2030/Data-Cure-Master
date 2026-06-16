@@ -87,7 +87,7 @@ code { font-family: var(--mono); font-size: 0.85em; color: var(--green); }
 /* ── Main Content ────────────────────────────────────────────────────────── */
 .main-content {
   padding-top: calc(var(--top-h) + 1rem);
-  padding-bottom: calc(var(--bnav-h) + 1.5rem);
+  padding-bottom: calc(var(--bnav-h) + 50px + 1.5rem);
   padding-left: 1rem;
   padding-right: 1rem;
   max-width: 680px;
@@ -1547,7 +1547,11 @@ body { overflow-x: hidden; max-width: 100vw; }
 
 /* ── AdMob Banner Slot (Datacure_Tab_Banner) ─────────────────────────────── */
 .admob-banner-slot {
-  width: 100%;
+  position: fixed;
+  bottom: var(--bnav-h);
+  left: 0;
+  right: 0;
+  z-index: 99;
   height: 50px;
   background: linear-gradient(90deg, rgba(0,255,136,0.06), rgba(168,85,247,0.06));
   border-top: 1px solid rgba(0,255,136,0.12);
@@ -1555,9 +1559,6 @@ body { overflow-x: hidden; max-width: 100vw; }
   display: flex;
   align-items: center;
   justify-content: center;
-  flex-shrink: 0;
-  position: relative;
-  z-index: 10;
   overflow: hidden;
 }
 .admob-banner-slot::before {

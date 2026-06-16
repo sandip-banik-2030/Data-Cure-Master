@@ -55,6 +55,7 @@
 <div class="redeem-layout">
   <div class="redeem-main">
     <form method="POST" action="{{ url_for('redeem') }}" id="redeem-form" novalidate>
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
 
       <!-- Pack selection -->
       <p class="section-label">Choose Recharge Pack</p>
@@ -242,7 +243,7 @@ function refreshPreview() {
   }
 }
 
-// Confirm before submit
+// Confirm before submit + disable button to prevent double-submission
 document.getElementById('redeem-form')?.addEventListener('submit', function(e) {
   const phone    = document.getElementById('phone').value;
   const operator = document.getElementById('operator').value;
@@ -258,7 +259,11 @@ document.getElementById('redeem-form')?.addEventListener('submit', function(e) {
     `Coins:    ${selectedCoins} deducted immediately\n\n` +
     `Processing takes up to 24 hours.`
   );
-  if (!ok) e.preventDefault();
+  if (!ok) { e.preventDefault(); return; }
+  // Prevent double-submission
+  const btn = document.getElementById('redeem-btn');
+  btn.disabled    = true;
+  btn.textContent = 'Submitting…';
 });
 </script>
 {% endblock %}
