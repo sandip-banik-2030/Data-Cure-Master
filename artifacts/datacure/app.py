@@ -45,11 +45,17 @@ COINS_PER_RUPEE     = 100
 MAX_ADS_PER_DAY     = 15
 MB_PER_REWARD       = 100
 FIXED_OTP           = "1234"
-REDEEM_PACKS        = {15: 1500, 20: 2000}
-RECHARGE_PACK_INFO  = {
-    15: {"coins": 1500, "data": "1 GB", "validity": "28 days"},
-    20: {"coins": 2000, "data": "2 GB", "validity": "28 days"},
-}
+REDEEM_PACKS_LIST = [
+    {"id": "jio_1gb_1d",    "name": "Jio 1GB Booster",          "operator": "Jio",    "data": "1 GB",              "validity": "1 Day",  "coins": 2250},
+    {"id": "airtel_1gb_1d", "name": "Airtel 1GB Booster",       "operator": "Airtel", "data": "1 GB",              "validity": "1 Day",  "coins": 2250},
+    {"id": "vi_1gb_1d",     "name": "Vi 1GB Booster",           "operator": "Vi",     "data": "1 GB",              "validity": "1 Day",  "coins": 2250},
+    {"id": "jio_2gb_2d",    "name": "Jio 2GB Booster",          "operator": "Jio",    "data": "2 GB",              "validity": "2 Days", "coins": 3200},
+    {"id": "vi_6gb_2d",     "name": "Vi 6GB Booster",           "operator": "Vi",     "data": "6 GB",              "validity": "2 Days", "coins": 8250},
+    {"id": "bsnl_ul_2d",    "name": "BSNL Unlimited + 1GB/Day", "operator": "BSNL",   "data": "Unlimited+1GB/Day", "validity": "2 Days", "coins": 2250},
+    {"id": "airtel_5gb_7d", "name": "Airtel 5GB Booster",       "operator": "Airtel", "data": "5 GB",              "validity": "7 Days", "coins": 8500},
+    {"id": "bsnl_ul_7d",    "name": "BSNL Unlimited + 1GB/Day", "operator": "BSNL",   "data": "Unlimited+1GB/Day", "validity": "7 Days", "coins": 6500},
+]
+REDEEM_PACKS_BY_ID  = {p["id"]: p for p in REDEEM_PACKS_LIST}
 OPERATORS           = ["Jio", "Airtel", "Vi", "BSNL"]
 ACTIVE_STATUSES     = ("pending", "processing")
 TARGET_BONUS_COINS  = 20
@@ -763,18 +769,12 @@ def redeem():
                       user_id=uid, ip=ip)
             return redirect(url_for("redeem"), 303)
 
-        amount_inr = request.form.get("amount_inr", "")
-        phone      = request.form.get("phone", "").strip()
-        operator   = request.form.get("operator", "").strip()
+        pack_id = request.form.get("pack_id", "").strip()
+        phone   = request.form.get("phone", "").strip()
 
-        # Validate pack
-        try:
-            amount_inr = int(amount_inr)
-        except (TypeError, ValueError):
-            flash("Invalid pack selection.", "error")
-            return redirect(url_for("redeem"), 303)
-
-        if amount_inr not in REDEEM_PACKS:
+        # Validate pack_id
+        pack = REDEEM_PACKS_BY_ID.get(pack_id)
+        if not pack:
             flash("Invalid pack selection.", "error")
             return redirect(url_for("redeem"), 303)
 
@@ -784,12 +784,8 @@ def redeem():
             flash(err, "error")
             return redirect(url_for("redeem"), 303)
 
-        # Validate operator
-        if operator not in OPERATORS:
-            flash("Please select a valid operator.", "error")
-            return redirect(url_for("redeem"), 303)
-
-        coins_required = REDEEM_PACKS[amount_inr]
+        coins_required = pack["coins"]
+        operator       = pack["operator"]
 
         # Server-side balance check (before deduct, prevents race conditions)
         balance = get_balance(db, uid)
@@ -801,8 +797,10 @@ def redeem():
             return redirect(url_for("redeem"), 303)
 
         # Deduct coins atomically via wallet service (never goes negative)
+        pack_label = f"{pack['name']} — {pack['data']} · {pack['validity']}"
         try:
-            deduct_coins(db, uid, coins_required, f"Recharge ₹{amount_inr} ({operator}) to {phone}")
+            deduct_coins(db, uid, coins_required,
+                         f"{pack['name']} ({pack['data']} · {pack['validity']}) to {phone}")
         except InsufficientFundsError:
             flash("Insufficient coins. Please try again.", "error")
             return redirect(url_for("redeem"), 303)
@@ -810,22 +808,21 @@ def redeem():
             flash(str(e), "error")
             return redirect(url_for("redeem"), 303)
 
-        # Store phone encoded, insert request
+        # Store phone encoded, insert request (recharge_amount=0 for coin-only packs)
         enc_phone = encode_phone(phone)
-        pack_label = f"₹{amount_inr} — {RECHARGE_PACK_INFO[amount_inr]['data']}"
         db.execute(
             """INSERT INTO recharge_requests
                (user_id, phone_number, operator, recharge_pack, recharge_amount, coins_used, status)
-               VALUES (?,?,?,?,?,?,'pending')""",
-            (uid, enc_phone, operator, pack_label, amount_inr, coins_required),
+               VALUES (?,?,?,?,0,?,'pending')""",
+            (uid, enc_phone, operator, pack_label, coins_required),
         )
         db.commit()
 
         log_event(db, EVENT_ADMIN_ACTION,
-                  f"Recharge request created: ₹{amount_inr} to {phone} via {operator}",
+                  f"Recharge request created: {pack['name']} to {phone} via {operator}",
                   user_id=uid, ip=ip)
 
-        flash(f"₹{amount_inr} recharge request submitted for {phone} ({operator}). Processing within 24 hours.", "success")
+        flash(f"{pack['name']} request submitted for {phone}. Processing within 24 hours.", "success")
         return redirect(url_for("my_requests"), 303)
 
     # GET — collect flash messages
@@ -842,10 +839,7 @@ def redeem():
     return render_template(
         "redeem.html",
         user=user,
-        pack_info=RECHARGE_PACK_INFO,
-        redeem_packs=REDEEM_PACKS,
-        coins_per_rupee=COINS_PER_RUPEE,
-        operators=OPERATORS,
+        packs=REDEEM_PACKS_LIST,
         decode_phone=decode_phone,
         prefill_phone=prefill_phone,
         blocked_request=active,

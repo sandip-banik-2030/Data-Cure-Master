@@ -21,7 +21,6 @@
   <span class="rb-label">Your Balance</span>
   <span class="rb-coins text-green" id="balance-coins">{{ user['coins'] }}</span>
   <span class="rb-unit">coins</span>
-  <span class="rb-rupees">≈ ₹{{ "%.0f"|format(user['coins'] / coins_per_rupee) }}</span>
 </div>
 
 <!-- ── Flash messages ────────────────────────────────────── -->
@@ -40,7 +39,7 @@
     <div class="blocked-title">Request Already Active</div>
     <div class="blocked-desc">
       You have a <strong class="status-{{ blocked_request['status'] }}-text">{{ blocked_request['status'] | capitalize }}</strong>
-      request for ₹{{ blocked_request['recharge_amount'] }} submitted on
+      request for <em>{{ blocked_request['recharge_pack'] }}</em> submitted on
       {{ blocked_request['created_at'][:10] }}.
       Wait for it to be resolved before submitting a new one.
     </div>
@@ -56,24 +55,26 @@
   <div class="redeem-main">
     <form method="POST" action="{{ url_for('redeem') }}" id="redeem-form" novalidate>
       <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <input type="hidden" name="pack_id"    value=""                id="selected-pack-id">
 
-      <!-- Pack selection -->
-      <p class="section-label">Choose Recharge Pack</p>
+      <!-- Pack selection grid -->
+      <p class="section-label">Choose a Booster Pack</p>
       <div class="pack-grid" id="pack-grid">
-        {% for amount, info in pack_info.items() %}
-        {% set affordable = user['coins'] >= info['coins'] %}
+        {% for pack in packs %}
+        {% set affordable = user['coins'] >= pack['coins'] %}
         <label class="pack-card {% if not affordable %}pack-disabled{% endif %}"
-               id="pack-label-{{ amount }}">
-          <input type="radio" name="amount_inr" value="{{ amount }}"
-                 {% if not affordable %}disabled{% endif %}
-                 onchange="onPackChange({{ amount }}, {{ info['coins'] }})">
+               id="pack-label-{{ pack['id'] }}"
+               onclick="onPackSelect('{{ pack['id'] }}', {{ pack['coins'] }}, '{{ pack['operator'] }}', '{{ pack['name'] }}', '{{ pack['data'] }}', '{{ pack['validity'] }}')">
+          <input type="radio" name="_pack_radio" value="{{ pack['id'] }}"
+                 {% if not affordable %}disabled{% endif %} style="display:none;">
           <div class="pack-inner">
-            <div class="pack-amount">₹{{ amount }}</div>
-            <div class="pack-data">{{ info['data'] }}</div>
-            <div class="pack-validity">{{ info['validity'] }}</div>
-            <div class="pack-coins-tag">{{ info['coins'] }} coins</div>
+            <div class="pack-op-badge op-{{ pack['operator'] | lower }}">{{ pack['operator'] }}</div>
+            <div class="pack-amount" style="font-size:0.95rem;line-height:1.3;">{{ pack['name'].replace(pack['operator'] + ' ', '') }}</div>
+            <div class="pack-data">{{ pack['data'] }}</div>
+            <div class="pack-validity">{{ pack['validity'] }}</div>
+            <div class="pack-coins-tag">{{ pack['coins'] }} coins</div>
             {% if not affordable %}
-            <div class="pack-shortage">Need {{ info['coins'] - user['coins'] }} more</div>
+            <div class="pack-shortage">Need {{ pack['coins'] - user['coins'] }} more</div>
             {% else %}
             <div class="pack-ok text-green">✓ Available</div>
             {% endif %}
@@ -82,9 +83,9 @@
         {% endfor %}
       </div>
 
-      <!-- Phone number -->
-      <div class="form-group" style="margin-top:1.5rem;">
-        <label for="phone">Mobile Number to Recharge</label>
+      <!-- Phone number — revealed after pack selection -->
+      <div class="form-group" id="phone-group" style="margin-top:1.5rem; display:none;">
+        <label for="phone">Enter Mobile Number</label>
         <input type="tel" id="phone" name="phone"
                value="{{ prefill_phone }}"
                maxlength="10" pattern="[0-9]{10}"
@@ -95,18 +96,6 @@
         <small class="field-hint" id="phone-hint">Enter the number you want to recharge</small>
       </div>
 
-      <!-- Operator dropdown -->
-      <div class="form-group">
-        <label for="operator">Mobile Operator</label>
-        <select id="operator" name="operator" onchange="onOperatorChange(this.value)">
-          <option value="">— Select Operator —</option>
-          {% for op in operators %}
-          <option value="{{ op }}">{{ op }}</option>
-          {% endfor %}
-        </select>
-        <small class="field-hint">Select your SIM card operator</small>
-      </div>
-
       <!-- Coin deduction preview -->
       <div class="coin-preview" id="coin-preview" style="display:none;">
         <div class="preview-row">
@@ -114,12 +103,12 @@
           <span class="preview-value" id="preview-pack">—</span>
         </div>
         <div class="preview-row">
-          <span class="preview-label">Recharge to</span>
-          <span class="preview-value" id="preview-phone">—</span>
-        </div>
-        <div class="preview-row">
           <span class="preview-label">Operator</span>
           <span class="preview-value" id="preview-operator">—</span>
+        </div>
+        <div class="preview-row">
+          <span class="preview-label">Recharge to</span>
+          <span class="preview-value" id="preview-phone">—</span>
         </div>
         <div class="preview-divider"></div>
         <div class="preview-row preview-total">
@@ -144,25 +133,14 @@
   <div class="redeem-side">
     <div class="card info-card">
       <h3 class="info-title">Pack Details</h3>
-      {% for amount, info in pack_info.items() %}
+      {% for pack in packs %}
       <div class="pack-detail-row">
-        <div class="pd-amount">₹{{ amount }}</div>
+        <div class="pd-amount op-dot-{{ pack['operator'] | lower }}">{{ pack['operator'] }}</div>
         <div class="pd-meta">
-          <span class="pd-data">{{ info['data'] }}</span>
-          <span class="pd-validity">{{ info['validity'] }}</span>
+          <span class="pd-data">{{ pack['data'] }}</span>
+          <span class="pd-validity">{{ pack['validity'] }}</span>
         </div>
-        <div class="pd-coins">{{ info['coins'] }}<span class="pd-coins-label"> coins</span></div>
-      </div>
-      {% endfor %}
-      <p class="info-note" style="margin-top:0.75rem;">100 coins = ₹1 value</p>
-    </div>
-
-    <div class="card info-card" style="margin-top:1rem;">
-      <h3 class="info-title">Supported Operators</h3>
-      {% for op in operators %}
-      <div class="operator-row">
-        <span class="op-dot"></span>
-        <span class="op-name">{{ op }}</span>
+        <div class="pd-coins">{{ pack['coins'] }}<span class="pd-coins-label"> coins</span></div>
       </div>
       {% endfor %}
     </div>
@@ -185,17 +163,32 @@
 {% endblock %}
 {% block scripts %}
 <script>
-const USER_COINS = {{ user['coins'] }};
-const PACK_INFO  = {{ pack_info | tojson }};
-let selectedAmount = null;
-let selectedCoins  = null;
+const USER_COINS   = {{ user['coins'] }};
+const PACKS        = {{ packs | tojson }};
+const PACKS_BY_ID  = Object.fromEntries(PACKS.map(p => [p.id, p]));
 
-function onPackChange(amount, coins) {
-  selectedAmount = amount;
-  selectedCoins  = coins;
+let selectedId     = null;
+let selectedCoins  = null;
+let selectedOp     = null;
+
+function onPackSelect(id, coins, operator, name, data, validity) {
+  selectedId    = id;
+  selectedCoins = coins;
+  selectedOp    = operator;
+
+  // Mark selected card
   document.querySelectorAll('.pack-card').forEach(c => c.classList.remove('selected'));
-  const lbl = document.getElementById('pack-label-' + amount);
+  const lbl = document.getElementById('pack-label-' + id);
   if (lbl) lbl.classList.add('selected');
+
+  // Reveal phone input
+  document.getElementById('phone-group').style.display = 'block';
+  document.getElementById('selected-pack-id').value = id;
+
+  // Update preview operator & pack
+  document.getElementById('preview-pack').textContent = name + ' (' + data + ' · ' + validity + ')';
+  document.getElementById('preview-operator').textContent = operator;
+
   refreshPreview();
 }
 
@@ -214,26 +207,16 @@ function onPhoneInput(val) {
   refreshPreview();
 }
 
-function onOperatorChange(val) {
-  document.getElementById('preview-operator').textContent = val || '—';
-  refreshPreview();
-}
-
 function refreshPreview() {
-  const phone    = document.getElementById('phone').value;
-  const operator = document.getElementById('operator').value;
-  const preview  = document.getElementById('coin-preview');
-  const btn      = document.getElementById('redeem-btn');
+  const phone   = document.getElementById('phone')?.value || '';
+  const preview = document.getElementById('coin-preview');
+  const btn     = document.getElementById('redeem-btn');
 
-  const ready = selectedCoins && phone.length === 10 && operator;
+  const ready = selectedId && phone.length === 10;
   btn.disabled = !ready;
 
   if (ready) {
-    const pack = PACK_INFO[selectedAmount];
-    document.getElementById('preview-pack').textContent =
-      '₹' + selectedAmount + ' — ' + pack.data;
     document.getElementById('preview-phone').textContent = phone;
-    document.getElementById('preview-operator').textContent = operator;
     document.getElementById('preview-coins').textContent = selectedCoins + ' coins';
     const afterBal = USER_COINS - selectedCoins;
     document.getElementById('preview-after').textContent = afterBal + ' coins';
@@ -245,22 +228,19 @@ function refreshPreview() {
 
 // Confirm before submit + disable button to prevent double-submission
 document.getElementById('redeem-form')?.addEventListener('submit', function(e) {
-  const phone    = document.getElementById('phone').value;
-  const operator = document.getElementById('operator').value;
-  if (!selectedAmount || phone.length !== 10 || !operator) {
-    e.preventDefault(); return;
-  }
-  const pack = PACK_INFO[selectedAmount];
+  const phone = document.getElementById('phone')?.value || '';
+  if (!selectedId || phone.length !== 10) { e.preventDefault(); return; }
+  const pack = PACKS_BY_ID[selectedId];
   const ok = confirm(
     `Confirm recharge request?\n\n` +
-    `Pack:     ₹${selectedAmount} (${pack.data})\n` +
+    `Pack:     ${pack.name}\n` +
+    `Data:     ${pack.data} · ${pack.validity}\n` +
     `Number:   ${phone}\n` +
-    `Operator: ${operator}\n` +
+    `Operator: ${pack.operator}\n` +
     `Coins:    ${selectedCoins} deducted immediately\n\n` +
     `Processing takes up to 24 hours.`
   );
   if (!ok) { e.preventDefault(); return; }
-  // Prevent double-submission
   const btn = document.getElementById('redeem-btn');
   btn.disabled    = true;
   btn.textContent = 'Submitting…';

@@ -65,10 +65,7 @@
       <div class="request-pack">
         <div class="req-pack-icon">📱</div>
         <div class="req-pack-details">
-          <div class="req-pack-amount">₹{{ r['recharge_amount'] }} Recharge</div>
-          <div class="req-pack-data">
-            {% if r['recharge_amount'] == 15 %}1 GB · 28 days{% elif r['recharge_amount'] == 20 %}2 GB · 28 days{% else %}Mobile Recharge{% endif %}
-          </div>
+          <div class="req-pack-amount" style="font-size:0.95rem;">{{ r['recharge_pack'] }}</div>
           <div class="req-pack-meta">{{ decode_phone(r['phone_number']) }} · {{ r['operator'] }}</div>
         </div>
       </div>
