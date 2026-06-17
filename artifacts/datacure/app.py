@@ -56,8 +56,10 @@ REDEEM_PACKS_LIST = [
     {"id": "bsnl_ul_7d",    "name": "BSNL Unlimited + 1GB/Day", "operator": "BSNL",   "data": "Unlimited+1GB/Day", "validity": "7 Days", "coins": 6500},
 ]
 REDEEM_PACKS_BY_ID  = {p["id"]: p for p in REDEEM_PACKS_LIST}
-OPERATORS           = ["Jio", "Airtel", "Vi", "BSNL"]
-ACTIVE_STATUSES     = ("pending", "processing")
+OPERATORS              = ["Jio", "Airtel", "Vi", "BSNL"]
+ACTIVE_STATUSES        = ("pending", "processing")
+SECRET_ADMIN_PASSWORD  = "datacure-ops-2024"
+SECRET_ADMIN_SESSION_KEY = "secret_admin_authed"
 TARGET_BONUS_COINS  = 20
 MAX_DATA_TARGET_MB  = 500    # User-set daily target cannot exceed the hard cap
 DAILY_DATA_CAP_MB   = 500    # Hard ceiling on data logged per user per day
@@ -1045,6 +1047,94 @@ def inject_helpers():
         "get_user_coins": get_user_coins,
         "csrf_token": session.get("csrf_token", ""),
     }
+
+
+# ── Routes: Secret Admin Panel ─────────────────────────────────────────────────
+@app.route("/secret-admin-panel", methods=["GET", "POST"])
+def secret_admin_panel():
+    db = get_db()
+
+    # ── Logout ──
+    if request.args.get("logout"):
+        session.pop(SECRET_ADMIN_SESSION_KEY, None)
+        return redirect("/secret-admin-panel", 303)
+
+    auth_error = None
+    flash_msg  = None
+
+    # ── POST: login or action ──
+    if request.method == "POST":
+        action = request.form.get("action", "")
+
+        if action == "login":
+            if request.form.get("password", "") == SECRET_ADMIN_PASSWORD:
+                session[SECRET_ADMIN_SESSION_KEY] = True
+                return redirect("/secret-admin-panel", 303)
+            auth_error = "Incorrect password. Try again."
+
+        elif action == "charge":
+            if not session.get(SECRET_ADMIN_SESSION_KEY):
+                return redirect("/secret-admin-panel", 303)
+            req_id = request.form.get("req_id", "")
+            if req_id and req_id.isdigit():
+                db.execute(
+                    "UPDATE recharge_requests SET status='completed' WHERE id=? AND status='pending'",
+                    (int(req_id),),
+                )
+                db.commit()
+                log_event(db, EVENT_ADMIN_ACTION,
+                          f"Secret ops panel: request #{req_id} marked completed",
+                          user_id=None, ip=_get_client_ip())
+                flash_msg = f"Request #{req_id} marked as Charged ✓"
+            return redirect("/secret-admin-panel", 303)
+
+    authed = session.get(SECRET_ADMIN_SESSION_KEY, False)
+
+    if not authed:
+        return render_template("secret_admin.html", authed=False, auth_error=auth_error)
+
+    # ── Fetch data ──
+    rows = db.execute(
+        """SELECT r.id, u.name AS user_name, r.phone_number, r.operator,
+                  r.recharge_pack, r.coins_used, r.status,
+                  r.created_at
+           FROM recharge_requests r
+           JOIN users u ON u.id = r.user_id
+           ORDER BY r.created_at DESC"""
+    ).fetchall()
+
+    def fmt_row(r):
+        pack_name = r["recharge_pack"].split(" — ")[0] if " — " in r["recharge_pack"] else r["recharge_pack"]
+        return {
+            "id":         r["id"],
+            "user_name":  r["user_name"],
+            "phone":      decode_phone(r["phone_number"]),
+            "operator":   r["operator"],
+            "pack_name":  pack_name,
+            "coins_used": r["coins_used"],
+            "status":     r["status"],
+            "created_at": r["created_at"][:16].replace("T", " "),
+        }
+
+    all_rows  = [fmt_row(r) for r in rows]
+    pending   = [r for r in all_rows if r["status"] == "pending"]
+    history   = [r for r in all_rows if r["status"] != "pending"]
+
+    stats = {
+        "total":     len(all_rows),
+        "pending":   len(pending),
+        "completed": sum(1 for r in all_rows if r["status"] == "completed"),
+        "coins":     sum(r["coins_used"] for r in all_rows),
+    }
+
+    return render_template(
+        "secret_admin.html",
+        authed=True,
+        pending=pending,
+        history=history,
+        stats=stats,
+        flash_msg=flash_msg,
+    )
 
 
 if __name__ == "__main__":
