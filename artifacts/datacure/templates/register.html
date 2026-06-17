@@ -16,18 +16,11 @@
 
     <form method="POST" action="{{ url_for('register') }}" class="auth-form" id="reg-form">
       <div class="form-group">
-        <label for="name">Full Name</label>
-        <input type="text" id="name" name="name" placeholder="Your name (min 3 chars)" minlength="3" required />
-      </div>
-
-      <div class="form-group">
-        <label for="phone">Phone Number</label>
-        <div class="input-wrap">
-          <span class="input-prefix">+91</span>
-          <input type="tel" id="phone" name="phone" maxlength="10"
-                 pattern="[0-9]{10}" placeholder="10-digit number"
-                 inputmode="numeric" autocomplete="tel-national" required />
-        </div>
+        <label for="user_id">User ID</label>
+        <input type="text" id="user_id" name="user_id"
+               placeholder="Letters, numbers, _ . - (min 3)"
+               minlength="3" maxlength="30" autocomplete="username"
+               autocorrect="off" autocapitalize="none" required />
       </div>
 
       <div class="form-group">
@@ -40,52 +33,10 @@
         </div>
       </div>
 
-      <!-- OTP Field -->
-      <div class="form-group">
-        <label for="otp">OTP</label>
-        <div class="otp-row">
-          <input type="text" id="otp" name="otp" placeholder="Enter OTP"
-                 maxlength="4" inputmode="numeric" class="otp-input" />
-          <button type="button" class="btn btn-outline btn-sm" id="send-otp-btn"
-                  onclick="simulateOtp()">Send OTP</button>
-        </div>
-        <div id="otp-status" class="otp-status" style="display:none;"></div>
-        <small class="field-hint">Demo OTP: <strong>1234</strong></small>
-      </div>
-
       <button type="submit" class="btn btn-primary btn-full" id="reg-btn">Create Account</button>
     </form>
 
     <p class="auth-switch">Already have an account? <a href="{{ url_for('login') }}">Sign in</a></p>
   </div>
 </div>
-{% endblock %}
-{% block scripts %}
-<script>
-function simulateOtp() {
-  const btn = document.getElementById('send-otp-btn');
-  const status = document.getElementById('otp-status');
-  const phone = document.getElementById('phone').value;
-
-  if (!phone || phone.length !== 10 || !/^\d{10}$/.test(phone)) {
-    status.textContent = '⚠ Enter a valid 10-digit phone number first.';
-    status.className = 'otp-status otp-error';
-    status.style.display = 'block';
-    return;
-  }
-
-  btn.disabled = true;
-  btn.textContent = 'Sending…';
-  status.textContent = 'Sending OTP…';
-  status.className = 'otp-status otp-pending';
-  status.style.display = 'block';
-
-  setTimeout(() => {
-    btn.textContent = 'Resend';
-    btn.disabled = false;
-    status.textContent = '✓ OTP sent to +91 ' + phone + ' (Demo: use 1234)';
-    status.className = 'otp-status otp-success';
-  }, 2000);
-}
-</script>
 {% endblock %}

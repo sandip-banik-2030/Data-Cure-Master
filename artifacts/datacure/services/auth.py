@@ -40,6 +40,18 @@ def validate_name(name: str):
     return None
 
 
+def validate_user_id(uid: str):
+    if not uid:
+        return "User ID is required."
+    if len(uid) < 3:
+        return "User ID must be at least 3 characters."
+    if len(uid) > 30:
+        return "User ID must be 30 characters or fewer."
+    if not re.match(r'^[A-Za-z0-9_.\-]+$', uid):
+        return "User ID may only contain letters, numbers, _ . and -"
+    return None
+
+
 def validate_phone(phone: str):
     if not phone:
         return "Phone number is required."

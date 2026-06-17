@@ -17,7 +17,7 @@ from services.ratelimit import check_rate_limit, rl_key
 from services.wallet import add_coins, deduct_coins, get_balance, WalletError, InsufficientFundsError
 from services.auth import (
     encode_phone, decode_phone, detect_operator,
-    validate_name, validate_phone, validate_password
+    validate_name, validate_phone, validate_password, validate_user_id
 )
 from services.security import (
     log_event,
@@ -183,33 +183,27 @@ def register():
         return redirect(url_for("dashboard"), 303)
 
     if request.method == "POST":
-        name     = request.form.get("name", "").strip()
-        phone    = request.form.get("phone", "").strip()
-        password = request.form.get("password", "").strip()
-        otp      = request.form.get("otp", "").strip()
+        uid_input = request.form.get("user_id", "").strip()
+        password  = request.form.get("password", "").strip()
 
-        err = validate_name(name) or validate_phone(phone) or validate_password(password)
+        err = validate_user_id(uid_input) or validate_password(password)
         if err:
             flash(err, "error")
             return redirect(url_for("register"), 303)
 
-        if otp != FIXED_OTP:
-            flash("Invalid OTP. Use 1234 for demo.", "error")
-            return redirect(url_for("register"), 303)
-
-        enc_phone = encode_phone(phone)
+        enc_uid = encode_phone(uid_input)
         db = get_db()
-        if db.execute("SELECT id FROM users WHERE phone_encrypted=?", (enc_phone,)).fetchone():
-            flash("An account with this number already exists.", "error")
+        if db.execute("SELECT id FROM users WHERE phone_encrypted=?", (enc_uid,)).fetchone():
+            flash("This User ID is already taken. Try a different one.", "error")
             return redirect(url_for("register"), 303)
 
         pw_hash = generate_password_hash(password)
         db.execute(
             "INSERT INTO users (name, phone_encrypted, password_hash, coins) VALUES (?,?,?,0)",
-            (name, enc_phone, pw_hash),
+            (uid_input, enc_uid, pw_hash),
         )
         db.commit()
-        user = db.execute("SELECT id FROM users WHERE phone_encrypted=?", (enc_phone,)).fetchone()
+        user = db.execute("SELECT id FROM users WHERE phone_encrypted=?", (enc_uid,)).fetchone()
         session.clear()
         session["user_id"] = user["id"]
         return redirect(url_for("dashboard"), 303)
@@ -225,23 +219,23 @@ def login():
         return redirect(url_for("dashboard"), 303)
 
     if request.method == "POST":
-        phone    = request.form.get("phone", "").strip()
-        password = request.form.get("password", "").strip()
+        uid_input = request.form.get("user_id", "").strip()
+        password  = request.form.get("password", "").strip()
 
-        err = validate_phone(phone)
+        err = validate_user_id(uid_input)
         if err:
             flash(err, "error")
             return redirect(url_for("login"), 303)
 
-        enc_phone = encode_phone(phone)
-        db   = get_db()
-        user = db.execute("SELECT * FROM users WHERE phone_encrypted=?", (enc_phone,)).fetchone()
+        enc_uid = encode_phone(uid_input)
+        db      = get_db()
+        user    = db.execute("SELECT * FROM users WHERE phone_encrypted=?", (enc_uid,)).fetchone()
 
         ip = request.remote_addr or ""
         if not user:
             log_event(get_db(), EVENT_LOGIN_FAILED,
-                      f"Unknown phone attempted login", user_id=None, ip=ip)
-            flash("No account found with this number.", "error")
+                      f"Unknown User ID attempted login", user_id=None, ip=ip)
+            flash("No account found with this User ID.", "error")
             return redirect(url_for("login"), 303)
         if not check_password_hash(user["password_hash"], password):
             log_event(get_db(), EVENT_LOGIN_FAILED,
@@ -835,8 +829,8 @@ def redeem():
         elif cat == "success":
             success = msg
 
-    # Pre-fill phone from account
-    prefill_phone = decode_phone(user["phone_encrypted"])
+    # Phone is now entered fresh at redeem time (not tied to account)
+    prefill_phone = ""
 
     return render_template(
         "redeem.html",

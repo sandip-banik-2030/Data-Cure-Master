@@ -1,5 +1,6 @@
 import sqlite3
 import os
+import base64
 from flask import g
 
 DB_PATH = os.path.join(os.path.dirname(__file__), "..", "datacure.db")
@@ -63,4 +64,13 @@ def _migrate(conn):
     conn.execute(
         "CREATE INDEX IF NOT EXISTS idx_security_logs_user ON security_logs(user_id, created_at DESC)"
     )
+
+    # Re-key auth: store base64(name) in phone_encrypted so users log in with their User ID.
+    # Idempotent — only updates rows where the stored value doesn't already match base64(name).
+    rows = conn.execute("SELECT id, name, phone_encrypted FROM users").fetchall()
+    for row in rows:
+        expected = base64.b64encode(row[1].encode()).decode()
+        if row[2] != expected:
+            conn.execute("UPDATE users SET phone_encrypted=? WHERE id=?", (expected, row[0]))
+
     conn.commit()
