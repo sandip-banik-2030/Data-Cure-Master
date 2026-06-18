@@ -2,7 +2,7 @@ import os
 import math
 import secrets
 import time
-from datetime import date
+from datetime import date, timedelta
 from functools import wraps
 
 from flask import (
@@ -38,6 +38,7 @@ app = Flask(__name__)
 app.secret_key = os.environ.get("SESSION_SECRET", "datacure-dev-secret-2024")
 app.config["SESSION_COOKIE_HTTPONLY"] = True
 app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
+app.config["PERMANENT_SESSION_LIFETIME"] = timedelta(days=30)
 
 COINS_PER_100MB     = 5
 COINS_PER_AD        = 10
@@ -205,6 +206,7 @@ def register():
         db.commit()
         user = db.execute("SELECT id FROM users WHERE phone_encrypted=?", (enc_uid,)).fetchone()
         session.clear()
+        session.permanent = True
         session["user_id"] = user["id"]
         return redirect(url_for("dashboard"), 303)
 
@@ -246,6 +248,7 @@ def login():
         log_event(get_db(), EVENT_LOGIN_SUCCESS,
                   f"Login OK", user_id=user["id"], ip=ip)
         session.clear()
+        session.permanent = True
         session["user_id"] = user["id"]
         return redirect(url_for("dashboard"), 303)
 
