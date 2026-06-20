@@ -1,8 +1,9 @@
-modules = ["nodejs-24"]
+modules = ["nodejs-24", "python-3.11"]
 
 [deployment]
 router = "application"
 deploymentTarget = "autoscale"
+run = "python artifacts/datacure/run.py"
 
 [deployment.postBuild]
 args = ["pnpm", "store", "prune"]
@@ -18,3 +19,11 @@ expertMode = true
 [postMerge]
 path = "scripts/post-merge.sh"
 timeoutMs = 20000
+
+[[ports]]
+localPort = 8080
+externalPort = 80
+
+[[ports]]
+localPort = 8081
+externalPort = 8081
