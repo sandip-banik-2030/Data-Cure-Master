@@ -28,7 +28,7 @@ from flask import session
 # ── Mode flag ──────────────────────────────────────────────────────────────────
 # True  → Google's universal test IDs (safe during development, no policy risk)
 # False → Your production keys (set this only when submitting to Play/App Store)
-TEST_MODE: bool = True
+TEST_MODE: bool = False
 
 # ── App ID ─────────────────────────────────────────────────────────────────────
 ADMOB_APP_ID = "ca-app-pub-1984458211665769~3776326573"
