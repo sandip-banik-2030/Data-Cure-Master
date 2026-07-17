@@ -29,7 +29,7 @@ from services.security import (
 )
 from services.admob import (
     TEST_MODE as ADMOB_TEST_MODE,
-    ADMOB_APP_ID, BANNER_AD_UNIT_ID, REWARDED_AD_UNIT_ID,
+    ADMOB_APP_ID, BANNER_AD_UNIT_ID, INTERSTITIAL_AD_UNIT_ID,REWARDED_AD_UNIT_ID,
     AD_BATCH_SIZE, AD_BATCH_COOLDOWN_SECS,
     get_batch_state, check_cooldown, record_ad_complete as admob_record_complete,
 )
@@ -312,6 +312,9 @@ def dashboard():
         target_pct=target_pct,
         target_bonus_coins=TARGET_BONUS_COINS,
         max_data_target=MAX_DATA_TARGET_MB,
+        banner_ad_id=BANNER_AD_UNIT_ID,
+        rewarded_ad_id=REWARDED_AD_UNIT_ID,
+        interstitial_ad_id=INTERSTITIAL_AD_UNIT_ID,
     )
 
 

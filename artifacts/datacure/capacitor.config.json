@@ -1,0 +1,12 @@
+{
+  "appId": "com.datacure.app",
+  "appName": "Datacure",
+  "webDir": "www",
+  "server": {
+    "url": "https://data-cure-master--sandip2030.replit.app",
+    "cleartext": true
+  },
+  "android": {
+    "versionCode": 2
+  }
+}

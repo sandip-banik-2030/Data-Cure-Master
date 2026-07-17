@@ -85,13 +85,19 @@ code { font-family: var(--mono); font-size: 0.85em; color: var(--green); }
 .topbar-logout:hover { color: var(--red); border-color: var(--red); }
 
 /* ── Main Content ────────────────────────────────────────────────────────── */
+/* ── Main Content ────────────────────────────────────────────────────────── */
 .main-content {
   padding-top: calc(var(--top-h) + 1rem);
-  padding-bottom: calc(var(--bnav-h) + 50px + 1.5rem);
   padding-left: 1rem;
   padding-right: 1rem;
   max-width: 680px;
   margin: 0 auto;
+
+  /* ⚡ Keyboard and Fixed Banner Ad Overlay Fixes ⚡ */
+  min-height: 100vh;
+  height: auto;
+  overflow-y: auto;
+  padding-bottom: 260px; /* Creates safe empty space above the keyboard and footer banner */
 }
 
 /* ── Bottom Navigation ───────────────────────────────────────────────────── */

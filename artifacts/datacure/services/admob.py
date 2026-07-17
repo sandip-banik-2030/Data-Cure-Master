@@ -10,13 +10,13 @@ IMPORTANT — Platform note:
   To go live with real ads:
     1. Wrap the app in Capacitor (npm i @capacitor/core @capacitor/admob).
     2. Set TEST_MODE = False below.
-    3. The BANNER_AD_UNIT_ID / REWARDED_AD_UNIT_ID constants are consumed by
-       the native plugin; this Flask server is the reward back-end.
+    3. The BANNER_AD_UNIT_ID / REWARDED_AD_UNIT_ID / INTERSTITIAL_AD_UNIT_ID constants 
+       are consumed by the native plugin; this Flask server is the reward back-end.
 
 Usage in app.py:
   from services.admob import (
       TEST_MODE, ADMOB_APP_ID,
-      BANNER_AD_UNIT_ID, REWARDED_AD_UNIT_ID,
+      BANNER_AD_UNIT_ID, REWARDED_AD_UNIT_ID, INTERSTITIAL_AD_UNIT_ID,
       AD_BATCH_SIZE, AD_BATCH_COOLDOWN_SECS,
       get_batch_state, record_ad_complete, check_cooldown,
   )
@@ -31,21 +31,24 @@ from flask import session
 TEST_MODE: bool = False
 
 # ── App ID ─────────────────────────────────────────────────────────────────────
-ADMOB_APP_ID = "ca-app-pub-1984458211665769~3776326573"
+ADMOB_APP_ID = "ca-app-pub-6526453776988230~5266977960"
 
 # ── Ad unit IDs ────────────────────────────────────────────────────────────────
-_PROD_BANNER_ID   = "ca-app-pub-1984458211665769/7041120862"   # Datacure_Tab_Banner
-_PROD_REWARDED_ID = "ca-app-pub-1984458211665769/4573863922"   # Datacure_Earn_Money_Video
+_PROD_BANNER_ID       = "ca-app-pub-6526453776988230/6061983643"   # Datacure_banner
+_PROD_REWARDED_ID     = "ca-app-pub-6526453776988230/4858537013"   # Datacure_rewarded
+_PROD_INTERSTITIAL_ID = "ca-app-pub-6526453776988230/1494007075"   # Datacure_interstitial
 
 # Google's safe universal test IDs — always use these in TEST_MODE
-_TEST_BANNER_ID   = "ca-app-pub-3940256099942544/6300978111"
-_TEST_REWARDED_ID = "ca-app-pub-3940256099942544/5224354917"
+_TEST_BANNER_ID       = "ca-app-pub-3940256099942544/6300978111"
+_TEST_REWARDED_ID     = "ca-app-pub-3940256099942544/5224354917"
+_TEST_INTERSTITIAL_ID = "ca-app-pub-3940256099942544/1033173712"
 
-BANNER_AD_UNIT_ID   = _TEST_BANNER_ID   if TEST_MODE else _PROD_BANNER_ID
-REWARDED_AD_UNIT_ID = _TEST_REWARDED_ID if TEST_MODE else _PROD_REWARDED_ID
+BANNER_AD_UNIT_ID       = _TEST_BANNER_ID       if TEST_MODE else _PROD_BANNER_ID
+REWARDED_AD_UNIT_ID     = _TEST_REWARDED_ID     if TEST_MODE else _PROD_REWARDED_ID
+INTERSTITIAL_AD_UNIT_ID = _TEST_INTERSTITIAL_ID if TEST_MODE else _PROD_INTERSTITIAL_ID
 
 # ── Anti-ban parameters ────────────────────────────────────────────────────────
-AD_BATCH_SIZE         = 5    # consecutive rewarded watches allowed before forced cooldown
+AD_BATCH_SIZE          = 5    # consecutive rewarded watches allowed before forced cooldown
 AD_BATCH_COOLDOWN_SECS = 120  # mandatory rest (seconds) after every AD_BATCH_SIZE ads
 
 

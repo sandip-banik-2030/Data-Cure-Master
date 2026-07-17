@@ -280,6 +280,17 @@ function saveTarget() {
 document.addEventListener('DOMContentLoaded', function() {
   const s = document.getElementById('target-slider');
   if (s) updateSliderFill(s);
+
+  // Native AdMob Interstitial Trigger for Tab/Screen View Change
+  if (window.Capacitor && window.Capacitor.Plugins.AdMob) {
+    const { AdMob } = window.Capacitor.Plugins;
+
+    AdMob.prepareInterstitial({
+      adId: "{{ interstitial_ad_id }}",
+      isTesting: false,
+      autoShow: true
+    }).catch(err => console.log("AdMob interstitial load skipped or deferred:", err));
+  }
 });
 </script>
 {% endblock %}

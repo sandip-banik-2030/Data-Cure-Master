@@ -1,0 +1,5 @@
+{
+  "platform": "android",
+  "release": "debug",
+  "androidPackageType": "apk"
+}
