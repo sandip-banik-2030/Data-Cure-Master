@@ -1,17 +1,18 @@
-{% extends "base.html" %}
-{% block title %}Dashboard — Datacure{% endblock %}
-{% block content %}
+{% extends "base.html" %} {% block title %}Dashboard — Datacure{% endblock %} {%
+block content %}
 
 <!-- Greeting -->
 <div class="page-header dash-greeting animate-fade-up">
   <div>
-    <h1>Hey, <span class="text-green">{{ user['name'].split()[0] }}</span> 👋</h1>
+    <h1>
+      Hey, <span class="text-green">{{ user['name'].split()[0] }}</span> 👋
+    </h1>
     <p class="page-sub" id="motivational-msg">
       {% if streak_info.streak == 0 %}Start your journey — every MB counts! 🚀
-      {% elif streak_info.streak < 3 %}You're warming up! Keep saving data 🔥
-      {% elif streak_info.streak < 7 %}On a {{ streak_info.streak }}-day roll! Unstoppable 💪
-      {% else %}Legend status: {{ streak_info.streak }}-day streak! 👑
-      {% endif %}
+      {% elif streak_info.streak < 3 %}You're warming up! Keep saving data 🔥 {%
+      elif streak_info.streak < 7 %}On a {{ streak_info.streak }}-day roll!
+      Unstoppable 💪 {% else %}Legend status: {{ streak_info.streak }}-day
+      streak! 👑 {% endif %}
     </p>
   </div>
 </div>
@@ -28,19 +29,26 @@
       <div class="wallet-info">
         <div class="wallet-label">Datacure Balance</div>
         <div class="wallet-coins">
-          <span data-live="coins" id="wallet-coins-val">{{ user['coins'] }}</span>
+          <span data-live="coins" id="wallet-coins-val"
+            >{{ user['coins'] }}</span
+          >
           <span class="wallet-coins-unit">DC</span>
         </div>
-        <div class="wallet-rupees">≈ ₹<span id="live-rupees">{{ "%.0f"|format(rupees_balance) }}</span> recharge value</div>
+        <div class="wallet-rupees">
+          ≈ ₹<span id="live-rupees">{{ "%.0f"|format(rupees_balance) }}</span>
+          recharge value
+        </div>
       </div>
     </div>
     <div class="wallet-right">
       {% if streak_info.bonus_granted %}
-      <div class="wallet-streak-badge animate-pop">🔥 +{{ streak_info.bonus_coins }}</div>
+      <div class="wallet-streak-badge animate-pop">
+        🔥 +{{ streak_info.bonus_coins }}
+      </div>
       {% endif %}
       <div class="wallet-streak-ring">
         <div class="wsr-num">{{ streak_info.streak }}</div>
-        <div class="wsr-label">day<br>streak</div>
+        <div class="wsr-label">day<br />streak</div>
       </div>
     </div>
   </div>
@@ -55,12 +63,17 @@
   </div>
   <div class="stat-card stat-data">
     <div class="stat-icon-wrap"><span class="stat-icon">💾</span></div>
-    <div class="stat-value" id="live-lifetime-data">{{ user['lifetime_data_saved'] }}</div>
+    <div class="stat-value" id="live-lifetime-data">
+      {{ user['lifetime_data_saved'] }}
+    </div>
     <div class="stat-label">MB Total</div>
   </div>
   <div class="stat-card stat-ads">
     <div class="stat-icon-wrap"><span class="stat-icon">⚡</span></div>
-    <div class="stat-value"><span id="live-ads-today">{{ ads_today }}</span><span class="stat-max">/{{ max_ads }}</span></div>
+    <div class="stat-value">
+      <span id="live-ads-today">{{ ads_today }}</span
+      ><span class="stat-max">/{{ max_ads }}</span>
+    </div>
     <div class="stat-label">Ads Today</div>
   </div>
   <div class="stat-card stat-rupees">
@@ -113,65 +126,107 @@
         <div class="target-title">Daily Data Target</div>
         <div class="target-sub">
           {% if target_pct >= 100 %}
-            <span class="text-green">🎉 Target hit! +{{ target_bonus_coins }} bonus coins</span>
+          <span class="text-green"
+            >🎉 Target hit! +{{ target_bonus_coins }} bonus coins</span
+          >
           {% else %}
-            <span id="target-bar-label">{{ today_data_saved }} / {{ daily_target }} MB ({{ target_pct }}%)</span>
+          <span id="target-bar-label"
+            >{{ today_data_saved }} / {{ daily_target }} MB ({{ target_pct
+            }}%)</span
+          >
           {% endif %}
         </div>
       </div>
     </div>
-    <button class="btn btn-xs btn-outline" onclick="toggleTargetEdit()">Set</button>
+    <button class="btn btn-xs btn-outline" onclick="toggleTargetEdit()">
+      Set
+    </button>
   </div>
 
   <div class="target-bar-track">
-    <div class="target-bar-fill {% if target_pct >= 100 %}target-bar-done{% endif %}"
-         id="target-bar-fill" style="width: {{ target_pct }}%"></div>
+    <div
+      class="target-bar-fill {% if target_pct >= 100 %}target-bar-done{% endif %}"
+      id="target-bar-fill"
+      style="width: {{ target_pct }}%"
+    ></div>
   </div>
 
-  <div class="target-edit-wrap" id="target-edit" style="display:none;">
+  <div class="target-edit-wrap" id="target-edit" style="display: none">
     <div class="target-edit-row">
-      <span class="target-edit-val" id="target-edit-disp">{{ daily_target }} MB</span>
-      <input type="range" id="target-slider" min="0" max="{{ max_data_target }}"
-             step="50" value="{{ daily_target }}"
-             class="mb-slider target-slider"
-             oninput="onTargetSlide(this.value)" />
-      <div class="slider-labels"><span>0</span><span>500</span><span>{{ max_data_target }}</span></div>
+      <span class="target-edit-val" id="target-edit-disp"
+        >{{ daily_target }} MB</span
+      >
+      <input
+        type="range"
+        id="target-slider"
+        min="0"
+        max="{{ max_data_target }}"
+        step="50"
+        value="{{ daily_target }}"
+        class="mb-slider target-slider"
+        oninput="onTargetSlide(this.value)"
+      />
+      <div class="slider-labels">
+        <span>0</span><span>500</span><span>{{ max_data_target }}</span>
+      </div>
     </div>
     <div class="target-edit-actions">
-      <button class="btn btn-sm btn-primary" onclick="saveTarget()">Save</button>
-      <button class="btn btn-sm btn-outline" onclick="toggleTargetEdit()">Cancel</button>
+      <button class="btn btn-sm btn-primary" onclick="saveTarget()">
+        Save
+      </button>
+      <button class="btn btn-sm btn-outline" onclick="toggleTargetEdit()">
+        Cancel
+      </button>
     </div>
-    <p class="field-hint" style="margin-top:0.5rem;">+{{ target_bonus_coins }} bonus coins when you hit the target!</p>
+    <p class="field-hint" style="margin-top: 0.5rem">
+      +{{ target_bonus_coins }} bonus coins when you hit the target!
+    </p>
   </div>
 </div>
 
 <!-- ── Streak Card ─────────────────────────────────────── -->
 <div class="streak-card animate-fade-up animate-delay-4">
   {% if streak_info.bonus_granted %}
-  <div class="streak-bonus-flash">🎉 +{{ streak_info.bonus_coins }} streak bonus coins earned today!</div>
+  <div class="streak-bonus-flash">
+    🎉 +{{ streak_info.bonus_coins }} streak bonus coins earned today!
+  </div>
   {% endif %}
   <div class="streak-body">
     <div class="streak-flame-wrap">
-      <div class="streak-flame {% if streak_info.streak >= 7 %}streak-flame-gold{% endif %}">🔥</div>
+      <div
+        class="streak-flame {% if streak_info.streak >= 7 %}streak-flame-gold{% endif %}"
+      >
+        🔥
+      </div>
       <div class="streak-count">{{ streak_info.streak }}</div>
       <div class="streak-label">day streak</div>
     </div>
     <div class="streak-progress-wrap">
       <div class="streak-progress-header">
         <span class="streak-progress-title">
-          {% if streak_info.streak == 0 %}Log in daily to start your streak
-          {% elif streak_info.days_to_target == streak_info.target %}🏆 {{ streak_info.streak }}-day milestone reached!
-          {% else %}{{ streak_info.days_to_target }} day{{ 's' if streak_info.days_to_target != 1 }} to {{ streak_info.target }}-day milestone
-          {% endif %}
+          {% if streak_info.streak == 0 %}Log in daily to start your streak {%
+          elif streak_info.days_to_target == streak_info.target %}🏆 {{
+          streak_info.streak }}-day milestone reached! {% else %}{{
+          streak_info.days_to_target }} day{{ 's' if streak_info.days_to_target
+          != 1 }} to {{ streak_info.target }}-day milestone {% endif %}
         </span>
-        <span class="streak-frac">{{ streak_info.streak % streak_info.target }}/{{ streak_info.target }}</span>
+        <span class="streak-frac"
+          >{{ streak_info.streak % streak_info.target }}/{{ streak_info.target
+          }}</span
+        >
       </div>
       <div class="streak-bar-track">
-        <div class="streak-bar-fill" style="width: {{ [streak_info.progress, 100]|min }}%"></div>
+        <div
+          class="streak-bar-fill"
+          style="width: {{ [streak_info.progress, 100]|min }}%"
+        ></div>
       </div>
       <div class="streak-meta">
         <span>+{{ streak_info.bonus_coins_per_day }} coins/day</span>
-        <span class="text-green">+{{ streak_info.bonus_coins_per_day * streak_info.target }} at {{ streak_info.target }}-day</span>
+        <span class="text-green"
+          >+{{ streak_info.bonus_coins_per_day * streak_info.target }} at {{
+          streak_info.target }}-day</span
+        >
       </div>
     </div>
   </div>
@@ -187,20 +242,24 @@
       <li class="activity-item">
         <div class="activity-icon-wrap">
           <span class="activity-icon">
-            {% if 'MB' in item['description'] %}📶
-            {% elif 'ad' in item['description']|lower %}⚡
-            {% elif 'Recharge' in item['description'] %}📱
-            {% elif 'streak' in item['description']|lower %}🔥
-            {% elif 'target' in item['description']|lower %}🎯
-            {% else %}🪙{% endif %}
+            {% if 'MB' in item['description'] %}📶 {% elif 'ad' in
+            item['description']|lower %}⚡ {% elif 'Recharge' in
+            item['description'] %}📱 {% elif 'streak' in
+            item['description']|lower %}🔥 {% elif 'target' in
+            item['description']|lower %}🎯 {% else %}🪙{% endif %}
           </span>
         </div>
         <div class="activity-body">
           <span class="activity-detail">{{ item['description'] }}</span>
-          <span class="activity-time">{{ item['created_at'][:16].replace('T', ' ') }}</span>
+          <span class="activity-time"
+            >{{ item['created_at'][:16].replace('T', ' ') }}</span
+          >
         </div>
-        <span class="activity-coins {% if item['transaction_type'] == 'credit' %}coins-plus{% else %}coins-minus{% endif %}">
-          {% if item['transaction_type'] == 'credit' %}+{% else %}-{% endif %}{{ item['amount'] }}
+        <span
+          class="activity-coins {% if item['transaction_type'] == 'credit' %}coins-plus{% else %}coins-minus{% endif %}"
+        >
+          {% if item['transaction_type'] == 'credit' %}+{% else %}-{% endif %}{{
+          item['amount'] }}
         </span>
       </li>
       {% endfor %}
@@ -221,10 +280,14 @@
       <li class="redemption-item">
         <div class="redemption-body">
           <span class="redemption-amount">₹{{ r['recharge_amount'] }}</span>
-          <span class="redemption-phone">→ {{ decode_phone(r['phone_number']) }}</span>
+          <span class="redemption-phone"
+            >→ {{ decode_phone(r['phone_number']) }}</span
+          >
           <span class="redemption-time">{{ r['created_at'][:10] }}</span>
         </div>
-        <span class="status-badge status-{{ r['status'] }}">{{ r['status'] | capitalize }}</span>
+        <span class="status-badge status-{{ r['status'] }}"
+          >{{ r['status'] | capitalize }}</span
+        >
       </li>
       {% endfor %}
     </ul>
@@ -237,60 +300,116 @@
   </div>
 </div>
 
-{% endblock %}
-{% block scripts %}
+<div
+  style="
+    margin-top: 30px;
+    margin-bottom: 30px;
+    padding: 20px;
+    border: 1px solid #fca5a5;
+    background-color: #fef2f2;
+    border-radius: 10px;
+  "
+  class="animate-fade-up animate-delay-4"
+>
+  <h3 style="color: #dc2626; margin-top: 0; font-size: 18px">⚠️ Danger Zone</h3>
+  <p style="color: #991b1b; font-size: 14px; margin-bottom: 15px">
+    Once you delete your account, all your saved data, coins, and transaction
+    history will be permanently deleted.
+  </p>
+  <button
+    onclick="handleDeleteAccount()"
+    style="
+      background-color: #dc2626;
+      color: white;
+      border: none;
+      padding: 10px 18px;
+      border-radius: 6px;
+      font-weight: bold;
+      cursor: pointer;
+    "
+  >
+    🗑️ Delete My Account
+  </button>
+</div>
+
+{% endblock %} {% block scripts %}
 <script>
-const MAX_TARGET = {{ max_data_target }};
-let pendingTarget = {{ daily_target }};
+  const MAX_TARGET = {{ max_data_target }};
+  let pendingTarget = {{ daily_target }};
 
-function toggleTargetEdit() {
-  const el = document.getElementById('target-edit');
-  const open = el.style.display === 'none' || !el.style.display;
-  el.style.display = open ? 'block' : 'none';
-  if (open) el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-}
-function onTargetSlide(val) {
-  pendingTarget = parseInt(val) || 0;
-  document.getElementById('target-edit-disp').textContent = pendingTarget + ' MB';
-  updateSliderFill(document.getElementById('target-slider'));
-}
-function updateSliderFill(slider) {
-  const pct = ((parseInt(slider.value) - parseInt(slider.min)) /
-               (parseInt(slider.max) - parseInt(slider.min))) * 100;
-  slider.style.background = `linear-gradient(to right, var(--green) ${pct}%, var(--border) ${pct}%)`;
-}
-function saveTarget() {
-  fetch('/x/set-target', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ target: pendingTarget })
-  })
-  .then(r => r.json())
-  .then(d => {
-    if (d.success) {
-      showToast(`Daily target set to ${d.target} MB`, 'success');
-      toggleTargetEdit();
-      refreshDashboardStats();
-    } else {
-      showToast(d.error || 'Failed to save target', 'error');
-    }
-  })
-  .catch(() => showToast('Network error', 'error'));
-}
-document.addEventListener('DOMContentLoaded', function() {
-  const s = document.getElementById('target-slider');
-  if (s) updateSliderFill(s);
-
-  // Native AdMob Interstitial Trigger for Tab/Screen View Change
-  if (window.Capacitor && window.Capacitor.Plugins.AdMob) {
-    const { AdMob } = window.Capacitor.Plugins;
-
-    AdMob.prepareInterstitial({
-      adId: "{{ interstitial_ad_id }}",
-      isTesting: false,
-      autoShow: true
-    }).catch(err => console.log("AdMob interstitial load skipped or deferred:", err));
+  function toggleTargetEdit() {
+    const el = document.getElementById('target-edit');
+    const open = el.style.display === 'none' || !el.style.display;
+    el.style.display = open ? 'block' : 'none';
+    if (open) el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
   }
-});
+  function onTargetSlide(val) {
+    pendingTarget = parseInt(val) || 0;
+    document.getElementById('target-edit-disp').textContent = pendingTarget + ' MB';
+    updateSliderFill(document.getElementById('target-slider'));
+  }
+  function updateSliderFill(slider) {
+    const pct = ((parseInt(slider.value) - parseInt(slider.min)) /
+                 (parseInt(slider.max) - parseInt(slider.min))) * 100;
+    slider.style.background = `linear-gradient(to right, var(--green) ${pct}%, var(--border) ${pct}%)`;
+  }
+  function saveTarget() {
+    fetch('/x/set-target', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ target: pendingTarget })
+    })
+    .then(r => r.json())
+    .then(d => {
+      if (d.success) {
+        showToast(`Daily target set to ${d.target} MB`, 'success');
+        toggleTargetEdit();
+        refreshDashboardStats();
+      } else {
+        showToast(d.error || 'Failed to save target', 'error');
+      }
+    })
+    .catch(() => showToast('Network error', 'error'));
+  }
+  document.addEventListener('DOMContentLoaded', function() {
+    const s = document.getElementById('target-slider');
+    if (s) updateSliderFill(s);
+
+    // Native AdMob Interstitial Trigger for Tab/Screen View Change
+    if (window.Capacitor && window.Capacitor.Plugins.AdMob) {
+      const { AdMob } = window.Capacitor.Plugins;
+
+      AdMob.prepareInterstitial({
+        adId: "{{ interstitial_ad_id }}",
+        isTesting: false,
+        autoShow: true
+      }).catch(err => console.log("AdMob interstitial load skipped or deferred:", err));
+    }
+  });
+
+  async function handleDeleteAccount() {
+      const confirmed = confirm("⚠️ Are you sure you want to delete your account? This action CANNOT be undone!");
+      if (!confirmed) return;
+
+      try {
+          const response = await fetch("/x/delete-account", {
+              method: "POST",
+              headers: {
+                  "Content-Type": "application/json"
+              }
+          });
+
+          const result = await response.json();
+
+          if (result.success) {
+              alert("Your account has been deleted.");
+              window.location.href = "/login";
+          } else {
+              alert(result.error || "Failed to delete account. Please try again.");
+          }
+      } catch (err) {
+          alert("An error occurred while connecting to the server.");
+      }
+  }
 </script>
 {% endblock %}

@@ -6,32 +6,66 @@ from datetime import date, timedelta
 from functools import wraps
 
 from flask import (
-    Flask, render_template, request, redirect,
-    url_for, session, jsonify, g, flash, get_flashed_messages
+    Flask,
+    render_template,
+    request,
+    redirect,
+    url_for,
+    session,
+    jsonify,
+    g,
+    flash,
+    get_flashed_messages,
 )
 from werkzeug.security import generate_password_hash, check_password_hash
 
 from database.db import get_db, init_db
 from services.streak import update_streak, STREAK_TARGET, STREAK_BONUS_COINS
 from services.ratelimit import check_rate_limit, rl_key
-from services.wallet import add_coins, deduct_coins, get_balance, WalletError, InsufficientFundsError
+from services.wallet import (
+    add_coins,
+    deduct_coins,
+    get_balance,
+    WalletError,
+    InsufficientFundsError,
+)
 from services.auth import (
-    encode_phone, decode_phone, detect_operator,
-    validate_name, validate_phone, validate_password, validate_user_id
+    encode_phone,
+    decode_phone,
+    detect_operator,
+    validate_name,
+    validate_phone,
+    validate_password,
+    validate_user_id,
 )
 from services.security import (
     log_event,
-    EVENT_LOGIN_SUCCESS, EVENT_LOGIN_FAILED,
-    EVENT_AD_STARTED, EVENT_AD_COMPLETED, EVENT_AD_ABORTED,
-    EVENT_AD_DUPLICATE, EVENT_AD_TOO_FAST, EVENT_AD_DAILY_LIMIT,
-    EVENT_ADMIN_ACTION, EVENT_RATE_LIMITED, EVENT_SPAM_ATTEMPT,
-    EVENT_INVALID_TOKEN, EVENT_DATA_CAP_HIT, EVENT_DATA_DUPE,
+    EVENT_LOGIN_SUCCESS,
+    EVENT_LOGIN_FAILED,
+    EVENT_AD_STARTED,
+    EVENT_AD_COMPLETED,
+    EVENT_AD_ABORTED,
+    EVENT_AD_DUPLICATE,
+    EVENT_AD_TOO_FAST,
+    EVENT_AD_DAILY_LIMIT,
+    EVENT_ADMIN_ACTION,
+    EVENT_RATE_LIMITED,
+    EVENT_SPAM_ATTEMPT,
+    EVENT_INVALID_TOKEN,
+    EVENT_DATA_CAP_HIT,
+    EVENT_DATA_DUPE,
 )
 from services.admob import (
     TEST_MODE as ADMOB_TEST_MODE,
-    ADMOB_APP_ID, BANNER_AD_UNIT_ID, INTERSTITIAL_AD_UNIT_ID,REWARDED_AD_UNIT_ID,
-    AD_BATCH_SIZE, AD_BATCH_COOLDOWN_SECS,
-    get_batch_state, check_cooldown, record_ad_complete as admob_record_complete,
+    ADMOB_APP_ID,
+    BANNER_AD_UNIT_ID,
+    INTERSTITIAL_AD_UNIT_ID,
+    REWARDED_AD_UNIT_ID,
+    AD_BATCH_SIZE,
+    AD_BATCH_COOLDOWN_SECS,
+    get_batch_state,
+    check_cooldown,
+    record_ad_complete as admob_record_complete,
 )
 
 app = Flask(__name__)
@@ -40,31 +74,87 @@ app.config["SESSION_COOKIE_HTTPONLY"] = True
 app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
 app.config["PERMANENT_SESSION_LIFETIME"] = timedelta(days=30)
 
-COINS_PER_100MB     = 5
-COINS_PER_AD        = 10
-COINS_PER_RUPEE     = 100
-MAX_ADS_PER_DAY     = 15
-MB_PER_REWARD       = 100
-FIXED_OTP           = "1234"
+COINS_PER_100MB = 5
+COINS_PER_AD = 10
+COINS_PER_RUPEE = 100
+MAX_ADS_PER_DAY = 15
+MB_PER_REWARD = 100
+FIXED_OTP = "1234"
 REDEEM_PACKS_LIST = [
-    {"id": "jio_1gb_1d",    "name": "Jio 1GB Booster",          "operator": "Jio",    "data": "1 GB",              "validity": "1 Day",  "coins": 2250},
-    {"id": "airtel_1gb_1d", "name": "Airtel 1GB Booster",       "operator": "Airtel", "data": "1 GB",              "validity": "1 Day",  "coins": 2250},
-    {"id": "vi_1gb_1d",     "name": "Vi 1GB Booster",           "operator": "Vi",     "data": "1 GB",              "validity": "1 Day",  "coins": 2250},
-    {"id": "jio_2gb_2d",    "name": "Jio 2GB Booster",          "operator": "Jio",    "data": "2 GB",              "validity": "2 Days", "coins": 3200},
-    {"id": "vi_6gb_2d",     "name": "Vi 6GB Booster",           "operator": "Vi",     "data": "6 GB",              "validity": "2 Days", "coins": 8250},
-    {"id": "bsnl_ul_2d",    "name": "BSNL Unlimited + 1GB/Day", "operator": "BSNL",   "data": "Unlimited+1GB/Day", "validity": "2 Days", "coins": 2250},
-    {"id": "airtel_5gb_7d", "name": "Airtel 5GB Booster",       "operator": "Airtel", "data": "5 GB",              "validity": "7 Days", "coins": 8500},
-    {"id": "bsnl_ul_7d",    "name": "BSNL Unlimited + 1GB/Day", "operator": "BSNL",   "data": "Unlimited+1GB/Day", "validity": "7 Days", "coins": 6500},
+    {
+        "id": "jio_1gb_1d",
+        "name": "Jio 1GB Booster",
+        "operator": "Jio",
+        "data": "1 GB",
+        "validity": "1 Day",
+        "coins": 2250,
+    },
+    {
+        "id": "airtel_1gb_1d",
+        "name": "Airtel 1GB Booster",
+        "operator": "Airtel",
+        "data": "1 GB",
+        "validity": "1 Day",
+        "coins": 2250,
+    },
+    {
+        "id": "vi_1gb_1d",
+        "name": "Vi 1GB Booster",
+        "operator": "Vi",
+        "data": "1 GB",
+        "validity": "1 Day",
+        "coins": 2250,
+    },
+    {
+        "id": "jio_2gb_2d",
+        "name": "Jio 2GB Booster",
+        "operator": "Jio",
+        "data": "2 GB",
+        "validity": "2 Days",
+        "coins": 3200,
+    },
+    {
+        "id": "vi_6gb_2d",
+        "name": "Vi 6GB Booster",
+        "operator": "Vi",
+        "data": "6 GB",
+        "validity": "2 Days",
+        "coins": 8250,
+    },
+    {
+        "id": "bsnl_ul_2d",
+        "name": "BSNL Unlimited + 1GB/Day",
+        "operator": "BSNL",
+        "data": "Unlimited+1GB/Day",
+        "validity": "2 Days",
+        "coins": 2250,
+    },
+    {
+        "id": "airtel_5gb_7d",
+        "name": "Airtel 5GB Booster",
+        "operator": "Airtel",
+        "data": "5 GB",
+        "validity": "7 Days",
+        "coins": 8500,
+    },
+    {
+        "id": "bsnl_ul_7d",
+        "name": "BSNL Unlimited + 1GB/Day",
+        "operator": "BSNL",
+        "data": "Unlimited+1GB/Day",
+        "validity": "7 Days",
+        "coins": 6500,
+    },
 ]
-REDEEM_PACKS_BY_ID  = {p["id"]: p for p in REDEEM_PACKS_LIST}
-OPERATORS              = ["Jio", "Airtel", "Vi", "BSNL"]
-ACTIVE_STATUSES        = ("pending", "processing")
-SECRET_ADMIN_PASSWORD  = "datacure-ops-2024"
+REDEEM_PACKS_BY_ID = {p["id"]: p for p in REDEEM_PACKS_LIST}
+OPERATORS = ["Jio", "Airtel", "Vi", "BSNL"]
+ACTIVE_STATUSES = ("pending", "processing")
+SECRET_ADMIN_PASSWORD = "datacure-ops-2024"
 SECRET_ADMIN_SESSION_KEY = "secret_admin_authed"
-TARGET_BONUS_COINS  = 20
-MAX_DATA_TARGET_MB  = 500    # User-set daily target cannot exceed the hard cap
-DAILY_DATA_CAP_MB   = 500    # Hard ceiling on data logged per user per day
-AD_DURATION_SECS    = 15
+TARGET_BONUS_COINS = 20
+MAX_DATA_TARGET_MB = 500  # User-set daily target cannot exceed the hard cap
+DAILY_DATA_CAP_MB = 500  # Hard ceiling on data logged per user per day
+AD_DURATION_SECS = 15
 
 
 # ── DB teardown ────────────────────────────────────────────────────────────────
@@ -82,6 +172,7 @@ def login_required(f):
         if "user_id" not in session:
             return redirect(url_for("login"), 303)
         return f(*args, **kwargs)
+
     return decorated
 
 
@@ -94,6 +185,7 @@ def admin_required(f):
         if not user or not user["is_admin"]:
             return redirect(url_for("dashboard"), 303)
         return f(*args, **kwargs)
+
     return decorated
 
 
@@ -111,10 +203,16 @@ def rate_limited(is_api=False, redirect_to=None, post_only=True):
                 if is_api:
                     return jsonify({"success": False, "error": msg}), 429
                 flash(msg, "error")
-                dest = url_for(redirect_to) if redirect_to else (request.referrer or url_for("dashboard"))
+                dest = (
+                    url_for(redirect_to)
+                    if redirect_to
+                    else (request.referrer or url_for("dashboard"))
+                )
                 return redirect(dest, 303)
             return f(*args, **kwargs)
+
         return decorated
+
     return decorator
 
 
@@ -157,7 +255,9 @@ def _check_target_bonus(db, user_id: int, today_saved: int, today: str) -> dict:
         return {"hit": False, "bonus": 0, "target": target}
     if row["target_bonus_date"] == today:
         return {"hit": True, "bonus": 0, "target": target, "already": True}
-    add_coins(db, user_id, TARGET_BONUS_COINS, f"Daily target bonus — {target} MB reached!")
+    add_coins(
+        db, user_id, TARGET_BONUS_COINS, f"Daily target bonus — {target} MB reached!"
+    )
     db.execute("UPDATE users SET target_bonus_date=? WHERE id=?", (today, user_id))
     db.commit()
     return {"hit": True, "bonus": TARGET_BONUS_COINS, "target": target}
@@ -185,7 +285,7 @@ def register():
 
     if request.method == "POST":
         uid_input = request.form.get("user_id", "").strip()
-        password  = request.form.get("password", "").strip()
+        password = request.form.get("password", "").strip()
 
         err = validate_user_id(uid_input) or validate_password(password)
         if err:
@@ -194,7 +294,9 @@ def register():
 
         enc_uid = encode_phone(uid_input)
         db = get_db()
-        if db.execute("SELECT id FROM users WHERE phone_encrypted=?", (enc_uid,)).fetchone():
+        if db.execute(
+            "SELECT id FROM users WHERE phone_encrypted=?", (enc_uid,)
+        ).fetchone():
             flash("This User ID is already taken. Try a different one.", "error")
             return redirect(url_for("register"), 303)
 
@@ -204,7 +306,9 @@ def register():
             (uid_input, enc_uid, pw_hash),
         )
         db.commit()
-        user = db.execute("SELECT id FROM users WHERE phone_encrypted=?", (enc_uid,)).fetchone()
+        user = db.execute(
+            "SELECT id FROM users WHERE phone_encrypted=?", (enc_uid,)
+        ).fetchone()
         session.clear()
         session.permanent = True
         session["user_id"] = user["id"]
@@ -222,7 +326,7 @@ def login():
 
     if request.method == "POST":
         uid_input = request.form.get("user_id", "").strip()
-        password  = request.form.get("password", "").strip()
+        password = request.form.get("password", "").strip()
 
         err = validate_user_id(uid_input)
         if err:
@@ -230,23 +334,34 @@ def login():
             return redirect(url_for("login"), 303)
 
         enc_uid = encode_phone(uid_input)
-        db      = get_db()
-        user    = db.execute("SELECT * FROM users WHERE phone_encrypted=?", (enc_uid,)).fetchone()
+        db = get_db()
+        user = db.execute(
+            "SELECT * FROM users WHERE phone_encrypted=?", (enc_uid,)
+        ).fetchone()
 
         ip = request.remote_addr or ""
         if not user:
-            log_event(get_db(), EVENT_LOGIN_FAILED,
-                      f"Unknown User ID attempted login", user_id=None, ip=ip)
+            log_event(
+                get_db(),
+                EVENT_LOGIN_FAILED,
+                f"Unknown User ID attempted login",
+                user_id=None,
+                ip=ip,
+            )
             flash("No account found with this User ID.", "error")
             return redirect(url_for("login"), 303)
         if not check_password_hash(user["password_hash"], password):
-            log_event(get_db(), EVENT_LOGIN_FAILED,
-                      f"Wrong password for user {user['id']}", user_id=user["id"], ip=ip)
+            log_event(
+                get_db(),
+                EVENT_LOGIN_FAILED,
+                f"Wrong password for user {user['id']}",
+                user_id=user["id"],
+                ip=ip,
+            )
             flash("Incorrect password.", "error")
             return redirect(url_for("login"), 303)
 
-        log_event(get_db(), EVENT_LOGIN_SUCCESS,
-                  f"Login OK", user_id=user["id"], ip=ip)
+        log_event(get_db(), EVENT_LOGIN_SUCCESS, f"Login OK", user_id=user["id"], ip=ip)
         session.clear()
         session.permanent = True
         session["user_id"] = user["id"]
@@ -265,7 +380,7 @@ def logout():
 @app.route("/dashboard")
 @login_required
 def dashboard():
-    db  = get_db()
+    db = get_db()
     uid = session["user_id"]
     today = date.today().isoformat()
 
@@ -275,7 +390,7 @@ def dashboard():
     today_data_saved = _sync_today_data(db, uid, today)
     user = get_user(uid)
 
-    ads_row   = db.execute(
+    ads_row = db.execute(
         "SELECT ads_watched FROM ad_rewards WHERE user_id=? AND reward_date=?",
         (uid, today),
     ).fetchone()
@@ -291,10 +406,14 @@ def dashboard():
         (uid,),
     ).fetchall()
 
-    coins          = get_balance(db, uid)
+    coins = get_balance(db, uid)
     rupees_balance = coins / COINS_PER_RUPEE
-    daily_target   = user["daily_data_target"] if user["daily_data_target"] else 200
-    target_pct     = min(100, round((today_data_saved / daily_target) * 100)) if daily_target > 0 else 0
+    daily_target = user["daily_data_target"] if user["daily_data_target"] else 200
+    target_pct = (
+        min(100, round((today_data_saved / daily_target) * 100))
+        if daily_target > 0
+        else 0
+    )
 
     return render_template(
         "dashboard.html",
@@ -324,13 +443,17 @@ def dashboard():
 def log_data():
     token = secrets.token_hex(16)
     session["log_token"] = token
-    db  = get_db()
+    db = get_db()
     uid = session["user_id"]
     today = date.today().isoformat()
     today_data_saved = _sync_today_data(db, uid, today)
     user = get_user(uid)
     daily_target = user["daily_data_target"] if user["daily_data_target"] else 200
-    target_pct   = min(100, round((today_data_saved / daily_target) * 100)) if daily_target > 0 else 0
+    target_pct = (
+        min(100, round((today_data_saved / daily_target) * 100))
+        if daily_target > 0
+        else 0
+    )
     remaining_mb = max(0, DAILY_DATA_CAP_MB - today_data_saved)
     daily_cap_hit = today_data_saved >= DAILY_DATA_CAP_MB
     return render_template(
@@ -354,38 +477,59 @@ def log_data():
 @login_required
 @rate_limited(is_api=True)
 def api_log_data():
-    data    = request.get_json(silent=True) or {}
-    token   = data.get("token", "")
+    data = request.get_json(silent=True) or {}
+    token = data.get("token", "")
     user_id = session["user_id"]
-    ip      = request.remote_addr
+    ip = request.remote_addr or "0.0.0.0"
 
     # ── 1. Token guard: prevents replay and double-submit ──────────────────
     if not token or token != session.get("log_token"):
-        log_event(get_db(), EVENT_INVALID_TOKEN,
-                  "log-data: invalid/reused token", user_id=user_id, ip=ip)
-        return jsonify({"success": False, "error": "Duplicate or invalid submission."}), 400
+        log_event(
+            get_db(),
+            EVENT_INVALID_TOKEN,
+            "log-data: invalid/reused token",
+            user_id=user_id,
+            ip=ip,
+        )
+        return jsonify(
+            {"success": False, "error": "Duplicate or invalid submission."}
+        ), 400
     session.pop("log_token", None)
 
     # ── 2. Basic input validation ──────────────────────────────────────────
-    raw_mb = data.get("mb_saved")
+    raw_mb = data.get("mb_saved", 0)
     try:
-        mb_saved = int(raw_mb)
+        mb_saved = int(raw_mb or 0)
     except (TypeError, ValueError):
         _reissue_log_token()
-        return jsonify({"success": False, "error": "MB value must be a whole number.",
-                        "next_token": session.get("log_token")}), 400
+        return jsonify(
+            {
+                "success": False,
+                "error": "MB value must be a whole number.",
+                "next_token": session.get("log_token"),
+            }
+        ), 400
 
     if mb_saved < 1:
         _reissue_log_token()
-        return jsonify({"success": False, "error": "Value must be at least 1 MB.",
-                        "next_token": session.get("log_token")}), 400
+        return jsonify(
+            {
+                "success": False,
+                "error": "Value must be at least 1 MB.",
+                "next_token": session.get("log_token"),
+            }
+        ), 400
     if mb_saved > DAILY_DATA_CAP_MB:
         _reissue_log_token()
-        return jsonify({"success": False,
-                        "error": f"Maximum is {DAILY_DATA_CAP_MB} MB per submission.",
-                        "next_token": session.get("log_token")}), 400
+        return jsonify(
+            {
+                "success": False,
+                "error": f"Maximum is {DAILY_DATA_CAP_MB} MB per submission.",
+                "next_token": session.get("log_token"),
+            }
+        ), 400
 
-    db    = get_db()
+    db = get_db()
     today = date.today().isoformat()
 
     # ── 3. Daily cap check (server-authoritative) ──────────────────────────
@@ -395,29 +539,37 @@ def api_log_data():
 
     if remaining_mb <= 0:
         # User already hit 2000 MB today — log the abuse attempt and reject.
-        log_event(db, EVENT_DATA_CAP_HIT,
-                  f"log-data: daily cap already reached (today={today_before} MB)",
-                  user_id=user_id, ip=ip)
+        log_event(
+            db,
+            EVENT_DATA_CAP_HIT,
+            f"log-data: daily cap already reached (today={today_before} MB)",
+            user_id=user_id,
+            ip=ip,
+        )
         _reissue_log_token()
-        return jsonify({
-            "success":          False,
-            "error":            "Daily limit of 2000 MB reached! Try again tomorrow.",
-            "daily_cap_hit":    True,
-            "today_data_saved": today_before,
-            "remaining_mb":     0,
-            "next_token":       session.get("log_token"),
-        }), 429
+        return jsonify(
+            {
+                "success": False,
+                "error": "Daily limit of 2000 MB reached! Try again tomorrow.",
+                "daily_cap_hit": True,
+                "today_data_saved": today_before,
+                "remaining_mb": 0,
+                "next_token": session.get("log_token"),
+            }
+        ), 429
 
     if today_before + mb_saved > DAILY_DATA_CAP_MB:
         # Submission would overshoot the cap — tell user the exact headroom.
         _reissue_log_token()
-        return jsonify({
-            "success":       False,
-            "error":         f"Only {remaining_mb} MB remaining for today. Reduce your entry.",
-            "remaining_mb":  remaining_mb,
-            "daily_cap_hit": False,
-            "next_token":    session.get("log_token"),
-        }), 400
+        return jsonify(
+            {
+                "success": False,
+                "error": f"Only {remaining_mb} MB remaining for today. Reduce your entry.",
+                "remaining_mb": remaining_mb,
+                "daily_cap_hit": False,
+                "next_token": session.get("log_token"),
+            }
+        ), 400
 
     # ── 4. Minute-level duplicate guard ────────────────────────────────────
     # Prevents a burst of concurrent requests that all pass the token check
@@ -431,18 +583,24 @@ def api_log_data():
         (user_id,),
     ).fetchone()
     if recent_dup:
-        log_event(db, EVENT_DATA_DUPE,
-                  "log-data: submission within 60s of previous",
-                  user_id=user_id, ip=ip)
+        log_event(
+            db,
+            EVENT_DATA_DUPE,
+            "log-data: submission within 60s of previous",
+            user_id=user_id,
+            ip=ip,
+        )
         _reissue_log_token()
-        return jsonify({
-            "success":    False,
-            "error":      "Please wait 60 seconds before logging again.",
-            "next_token": session.get("log_token"),
-        }), 429
+        return jsonify(
+            {
+                "success": False,
+                "error": "Please wait 60 seconds before logging again.",
+                "next_token": session.get("log_token"),
+            }
+        ), 429
 
     # ── 5. All checks passed — compute coins and persist ───────────────────
-    today_after  = today_before + mb_saved
+    today_after = today_before + mb_saved
     coins_earned = math.floor(mb_saved / 100) * COINS_PER_100MB
 
     # Write today_saved + lifetime together; also stamp last_data_date so
@@ -458,7 +616,9 @@ def api_log_data():
 
     new_balance = get_balance(db, user_id)
     if coins_earned > 0:
-        new_balance = add_coins(db, user_id, coins_earned, f"Logged {mb_saved} MB saved")
+        new_balance = add_coins(
+            db, user_id, coins_earned, f"Logged {mb_saved} MB saved"
+        )
     else:
         db.commit()
 
@@ -472,23 +632,27 @@ def api_log_data():
     new_token = session["log_token"]
 
     user = get_user(user_id)
-    daily_target     = user["daily_data_target"] if user["daily_data_target"] else 200
-    remaining_after  = max(0, DAILY_DATA_CAP_MB - today_after)
+    daily_target = user["daily_data_target"] if user["daily_data_target"] else 200
+    remaining_after = max(0, DAILY_DATA_CAP_MB - today_after)
 
-    return jsonify({
-        "success":          True,
-        "new_coins":        coins_earned,
-        "total_coins":      new_balance,
-        "mb_saved":         mb_saved,
-        "next_token":       new_token,
-        "today_data_saved": today_after,
-        "daily_target":     daily_target,
-        "target_hit":       target_result.get("hit", False),
-        "target_bonus":     target_result.get("bonus", 0),
-        "target_pct":       min(100, round((today_after / daily_target) * 100)) if daily_target > 0 else 0,
-        "daily_cap_hit":    today_after >= DAILY_DATA_CAP_MB,
-        "remaining_mb":     remaining_after,
-    })
+    return jsonify(
+        {
+            "success": True,
+            "new_coins": coins_earned,
+            "total_coins": new_balance,
+            "mb_saved": mb_saved,
+            "next_token": new_token,
+            "today_data_saved": today_after,
+            "daily_target": daily_target,
+            "target_hit": target_result.get("hit", False),
+            "target_bonus": target_result.get("bonus", 0),
+            "target_pct": min(100, round((today_after / daily_target) * 100))
+            if daily_target > 0
+            else 0,
+            "daily_cap_hit": today_after >= DAILY_DATA_CAP_MB,
+            "remaining_mb": remaining_after,
+        }
+    )
 
 
 # ── Routes: Set Daily Target ───────────────────────────────────────────────────
@@ -502,10 +666,14 @@ def api_set_target():
         return jsonify({"success": False, "error": "Invalid target value."}), 400
 
     if target < 0 or target > MAX_DATA_TARGET_MB:
-        return jsonify({"success": False, "error": f"Target must be 0–{MAX_DATA_TARGET_MB} MB."}), 400
+        return jsonify(
+            {"success": False, "error": f"Target must be 0–{MAX_DATA_TARGET_MB} MB."}
+        ), 400
 
     db = get_db()
-    db.execute("UPDATE users SET daily_data_target=? WHERE id=?", (target, session["user_id"]))
+    db.execute(
+        "UPDATE users SET daily_data_target=? WHERE id=?", (target, session["user_id"])
+    )
     db.commit()
     return jsonify({"success": True, "target": target})
 
@@ -514,13 +682,13 @@ def api_set_target():
 @app.route("/x/dashboard-stats")
 @login_required
 def api_dashboard_stats():
-    db    = get_db()
-    uid   = session["user_id"]
+    db = get_db()
+    uid = session["user_id"]
     today = date.today().isoformat()
 
     today_data_saved = _sync_today_data(db, uid, today)
-    user   = get_user(uid)
-    coins  = get_balance(db, uid)
+    user = get_user(uid)
+    coins = get_balance(db, uid)
 
     ads_row = db.execute(
         "SELECT ads_watched FROM ad_rewards WHERE user_id=? AND reward_date=?",
@@ -529,23 +697,27 @@ def api_dashboard_stats():
     ads_today = ads_row["ads_watched"] if ads_row else 0
     daily_target = user["daily_data_target"] if user["daily_data_target"] else 200
 
-    return jsonify({
-        "coins":              coins,
-        "rupees":             round(coins / COINS_PER_RUPEE, 2),
-        "today_data_saved":   today_data_saved,
-        "lifetime_data_saved": user["lifetime_data_saved"],
-        "streak":             user["streak"],
-        "ads_today":          ads_today,
-        "daily_data_target":  daily_target,
-        "target_pct":         min(100, round((today_data_saved / daily_target) * 100)) if daily_target > 0 else 0,
-    })
+    return jsonify(
+        {
+            "coins": coins,
+            "rupees": round(coins / COINS_PER_RUPEE, 2),
+            "today_data_saved": today_data_saved,
+            "lifetime_data_saved": user["lifetime_data_saved"],
+            "streak": user["streak"],
+            "ads_today": ads_today,
+            "daily_data_target": daily_target,
+            "target_pct": min(100, round((today_data_saved / daily_target) * 100))
+            if daily_target > 0
+            else 0,
+        }
+    )
 
 
 # ── Routes: Ad Rewards ─────────────────────────────────────────────────────────
 @app.route("/rewards")
 @login_required
 def rewards():
-    db  = get_db()
+    db = get_db()
     uid = session["user_id"]
     today = date.today().isoformat()
     ads_row = db.execute(
@@ -580,8 +752,7 @@ def _get_client_ip():
 def _check_csrf():
     """Validate CSRF token on AJAX requests. Returns True if valid."""
     data = request.get_json(silent=True) or {}
-    client_csrf = (data.get("csrf_token") or
-                   request.headers.get("X-DC-CSRF", ""))
+    client_csrf = data.get("csrf_token") or request.headers.get("X-DC-CSRF", "")
     return bool(client_csrf and client_csrf == session.get("csrf_token"))
 
 
@@ -590,8 +761,8 @@ def _check_csrf():
 @rate_limited(is_api=True)
 def api_ad_start():
     uid = session["user_id"]
-    ip  = _get_client_ip()
-    db  = get_db()
+    ip = _get_client_ip()
+    db = get_db()
 
     if not _check_csrf():
         log_event(db, EVENT_SPAM_ATTEMPT, "Ad start: bad CSRF", user_id=uid, ip=ip)
@@ -600,12 +771,14 @@ def api_ad_start():
     # ── Batch cooldown guard ───────────────────────────────────────────────
     in_cooldown, secs_left = check_cooldown()
     if in_cooldown:
-        return jsonify({
-            "ok":           False,
-            "reason":       "batch_cooldown",
-            "cooldown_secs": secs_left,
-            "error":        f"Batch cooldown active. Please wait {secs_left}s.",
-        }), 429
+        return jsonify(
+            {
+                "ok": False,
+                "reason": "batch_cooldown",
+                "cooldown_secs": secs_left,
+                "error": f"Batch cooldown active. Please wait {secs_left}s.",
+            }
+        ), 429
 
     today = date.today().isoformat()
     ads_row = db.execute(
@@ -615,37 +788,52 @@ def api_ad_start():
     ads_today = ads_row["ads_watched"] if ads_row else 0
 
     if ads_today >= MAX_ADS_PER_DAY:
-        log_event(db, EVENT_AD_DAILY_LIMIT,
-                  f"Daily limit hit ({ads_today}/{MAX_ADS_PER_DAY})",
-                  user_id=uid, ip=ip)
-        return jsonify({"ok": False, "reason": "daily_limit",
-                        "error": f"Daily limit of {MAX_ADS_PER_DAY} ads reached."}), 429
+        log_event(
+            db,
+            EVENT_AD_DAILY_LIMIT,
+            f"Daily limit hit ({ads_today}/{MAX_ADS_PER_DAY})",
+            user_id=uid,
+            ip=ip,
+        )
+        return jsonify(
+            {
+                "ok": False,
+                "reason": "daily_limit",
+                "error": f"Daily limit of {MAX_ADS_PER_DAY} ads reached.",
+            }
+        ), 429
 
     watch_token = secrets.token_hex(24)
-    session["ad_token"]      = watch_token
+    session["ad_token"] = watch_token
     session["ad_token_time"] = time.time()
     batch = get_batch_state()
-    log_event(db, EVENT_AD_STARTED,
-              f"Ad session started (batch {batch['batch_count']+1}/{AD_BATCH_SIZE})",
-              user_id=uid, ip=ip)
-    return jsonify({
-        "ok":          True,
-        "token":       watch_token,
-        "duration":    AD_DURATION_SECS,
-        "batch_pos":   batch["batch_count"] + 1,
-        "batch_size":  AD_BATCH_SIZE,
-    })
+    log_event(
+        db,
+        EVENT_AD_STARTED,
+        f"Ad session started (batch {batch['batch_count'] + 1}/{AD_BATCH_SIZE})",
+        user_id=uid,
+        ip=ip,
+    )
+    return jsonify(
+        {
+            "ok": True,
+            "token": watch_token,
+            "duration": AD_DURATION_SECS,
+            "batch_pos": batch["batch_count"] + 1,
+            "batch_size": AD_BATCH_SIZE,
+        }
+    )
 
 
 @app.route("/x/ad/complete", methods=["POST"])
 @login_required
 @rate_limited(is_api=True)
 def api_ad_complete():
-    data  = request.get_json(silent=True) or {}
+    data = request.get_json(silent=True) or {}
     token = data.get("token", "")
-    uid   = session["user_id"]
-    ip    = _get_client_ip()
-    db    = get_db()
+    uid = session["user_id"]
+    ip = _get_client_ip()
+    db = get_db()
 
     if not _check_csrf():
         log_event(db, EVENT_SPAM_ATTEMPT, "Ad complete: bad CSRF", user_id=uid, ip=ip)
@@ -653,18 +841,35 @@ def api_ad_complete():
 
     stored_token = session.get("ad_token")
     if not token or not stored_token or token != stored_token:
-        log_event(db, EVENT_AD_DUPLICATE,
-                  f"Bad/duplicate token on ad complete", user_id=uid, ip=ip)
-        return jsonify({"ok": False, "error": "Invalid or expired session. Start a new ad."}), 400
+        log_event(
+            db,
+            EVENT_AD_DUPLICATE,
+            f"Bad/duplicate token on ad complete",
+            user_id=uid,
+            ip=ip,
+        )
+        return jsonify(
+            {"ok": False, "error": "Invalid or expired session. Start a new ad."}
+        ), 400
 
     elapsed = time.time() - session.get("ad_token_time", 0)
-    min_elapsed = AD_DURATION_SECS - 1   # 1s grace
+    min_elapsed = AD_DURATION_SECS - 1  # 1s grace
     if elapsed < min_elapsed:
-        log_event(db, EVENT_AD_TOO_FAST,
-                  f"Too fast: {elapsed:.1f}s (min {min_elapsed}s)", user_id=uid, ip=ip)
+        log_event(
+            db,
+            EVENT_AD_TOO_FAST,
+            f"Too fast: {elapsed:.1f}s (min {min_elapsed}s)",
+            user_id=uid,
+            ip=ip,
+        )
         session.pop("ad_token", None)
         session.pop("ad_token_time", None)
-        return jsonify({"ok": False, "error": "Ad not fully watched. Please watch the complete ad."}), 400
+        return jsonify(
+            {
+                "ok": False,
+                "error": "Ad not fully watched. Please watch the complete ad.",
+            }
+        ), 400
 
     # Consume the token immediately to prevent replay
     session.pop("ad_token", None)
@@ -678,8 +883,13 @@ def api_ad_complete():
     ads_today = ads_row["ads_watched"] if ads_row else 0
 
     if ads_today >= MAX_ADS_PER_DAY:
-        log_event(db, EVENT_AD_DAILY_LIMIT,
-                  f"Tried to complete after daily limit", user_id=uid, ip=ip)
+        log_event(
+            db,
+            EVENT_AD_DAILY_LIMIT,
+            f"Tried to complete after daily limit",
+            user_id=uid,
+            ip=ip,
+        )
         return jsonify({"ok": False, "error": "Daily limit reached."}), 429
 
     if ads_row:
@@ -693,7 +903,9 @@ def api_ad_complete():
             (uid, today),
         )
 
-    db.execute("UPDATE users SET total_ads_watched = total_ads_watched + 1 WHERE id=?", (uid,))
+    db.execute(
+        "UPDATE users SET total_ads_watched = total_ads_watched + 1 WHERE id=?", (uid,)
+    )
     new_balance = add_coins(db, uid, COINS_PER_AD, "Watched reward ad")
     new_ads_today = ads_today + 1
     remaining = max(0, MAX_ADS_PER_DAY - new_ads_today)
@@ -701,42 +913,47 @@ def api_ad_complete():
     # ── Batch cooldown tracking ────────────────────────────────────────────
     batch_result = admob_record_complete()
 
-    log_event(db, EVENT_AD_COMPLETED,
-              f"Reward granted ({elapsed:.1f}s elapsed) ads_today={new_ads_today} "
-              f"batch={batch_result['ads_in_batch']}/{AD_BATCH_SIZE}"
-              f"{' → cooldown' if batch_result['cooldown_triggered'] else ''}",
-              user_id=uid, ip=ip)
+    log_event(
+        db,
+        EVENT_AD_COMPLETED,
+        f"Reward granted ({elapsed:.1f}s elapsed) ads_today={new_ads_today} "
+        f"batch={batch_result['ads_in_batch']}/{AD_BATCH_SIZE}"
+        f"{' → cooldown' if batch_result['cooldown_triggered'] else ''}",
+        user_id=uid,
+        ip=ip,
+    )
 
-    return jsonify({
-        "ok":                  True,
-        "new_coins":           COINS_PER_AD,
-        "total_coins":         new_balance,
-        "ads_today":           new_ads_today,
-        "remaining":           remaining,
-        "batch_pos":           batch_result["ads_in_batch"],
-        "batch_size":          batch_result["batch_size"],
-        "cooldown_triggered":  batch_result["cooldown_triggered"],
-        "cooldown_secs":       batch_result["cooldown_secs"],
-    })
+    return jsonify(
+        {
+            "ok": True,
+            "new_coins": COINS_PER_AD,
+            "total_coins": new_balance,
+            "ads_today": new_ads_today,
+            "remaining": remaining,
+            "batch_pos": batch_result["ads_in_batch"],
+            "batch_size": batch_result["batch_size"],
+            "cooldown_triggered": batch_result["cooldown_triggered"],
+            "cooldown_secs": batch_result["cooldown_secs"],
+        }
+    )
 
 
 @app.route("/x/ad/abort", methods=["POST"])
 @login_required
 def api_ad_abort():
     """Called by the client when an ad is interrupted (tab hidden, page unload)."""
-    data   = request.get_json(silent=True) or {}
-    token  = data.get("token", "")
+    data = request.get_json(silent=True) or {}
+    token = data.get("token", "")
     reason = data.get("reason", "unknown")[:64]
-    uid    = session["user_id"]
-    ip     = _get_client_ip()
-    db     = get_db()
+    uid = session["user_id"]
+    ip = _get_client_ip()
+    db = get_db()
 
     stored = session.get("ad_token")
     if stored and token == stored:
         session.pop("ad_token", None)
         session.pop("ad_token_time", None)
-        log_event(db, EVENT_AD_ABORTED,
-                  f"Ad aborted: {reason}", user_id=uid, ip=ip)
+        log_event(db, EVENT_AD_ABORTED, f"Ad aborted: {reason}", user_id=uid, ip=ip)
 
     return jsonify({"ok": True})
 
@@ -746,10 +963,10 @@ def api_ad_abort():
 @login_required
 @rate_limited(redirect_to="redeem")
 def redeem():
-    db  = get_db()
+    db = get_db()
     uid = session["user_id"]
     user = get_user(uid)
-    ip   = _get_client_ip()
+    ip = _get_client_ip()
 
     # Check for existing active request BEFORE processing POST
     active = db.execute(
@@ -765,14 +982,21 @@ def redeem():
 
         # Block duplicate requests
         if active:
-            flash("You already have a pending or processing request. Wait for it to be resolved.", "error")
-            log_event(db, EVENT_SPAM_ATTEMPT,
-                      f"Tried to create duplicate request while {active['status']} exists",
-                      user_id=uid, ip=ip)
+            flash(
+                "You already have a pending or processing request. Wait for it to be resolved.",
+                "error",
+            )
+            log_event(
+                db,
+                EVENT_SPAM_ATTEMPT,
+                f"Tried to create duplicate request while {active['status']} exists",
+                user_id=uid,
+                ip=ip,
+            )
             return redirect(url_for("redeem"), 303)
 
         pack_id = request.form.get("pack_id", "").strip()
-        phone   = request.form.get("phone", "").strip()
+        phone = request.form.get("phone", "").strip()
 
         # Validate pack_id
         pack = REDEEM_PACKS_BY_ID.get(pack_id)
@@ -786,23 +1010,34 @@ def redeem():
             flash(err, "error")
             return redirect(url_for("redeem"), 303)
 
-        coins_required = pack["coins"]
-        operator       = pack["operator"]
+        coins_required = int(pack.get("coins", 0))
+        operator = pack.get("operator", "")
 
         # Server-side balance check (before deduct, prevents race conditions)
-        balance = get_balance(db, uid)
+        balance = int(get_balance(db, uid) or 0)
         if balance < coins_required:
-            flash(f"Insufficient coins. You need {coins_required} but have {balance}.", "error")
-            log_event(db, EVENT_SPAM_ATTEMPT,
-                      f"Redeem attempt with insufficient funds: {balance}<{coins_required}",
-                      user_id=uid, ip=ip)
+            flash(
+                f"Insufficient coins. You need {coins_required} but have {balance}.",
+                "error",
+            )
+            log_event(
+                db,
+                EVENT_SPAM_ATTEMPT,
+                f"Redeem attempt with insufficient funds: {balance}<{coins_required}",
+                user_id=uid,
+                ip=ip,
+            )
             return redirect(url_for("redeem"), 303)
 
         # Deduct coins atomically via wallet service (never goes negative)
         pack_label = f"{pack['name']} — {pack['data']} · {pack['validity']}"
         try:
-            deduct_coins(db, uid, coins_required,
-                         f"{pack['name']} ({pack['data']} · {pack['validity']}) to {phone}")
+            deduct_coins(
+                db,
+                uid,
+                coins_required,
+                f"{pack['name']} ({pack['data']} · {pack['validity']}) to {phone}",
+            )
         except InsufficientFundsError:
             flash("Insufficient coins. Please try again.", "error")
             return redirect(url_for("redeem"), 303)
@@ -820,11 +1055,18 @@ def redeem():
         )
         db.commit()
 
-        log_event(db, EVENT_ADMIN_ACTION,
-                  f"Recharge request created: {pack['name']} to {phone} via {operator}",
-                  user_id=uid, ip=ip)
+        log_event(
+            db,
+            EVENT_ADMIN_ACTION,
+            f"Recharge request created: {pack['name']} to {phone} via {operator}",
+            user_id=uid,
+            ip=ip,
+        )
 
-        flash(f"{pack['name']} request submitted for {phone}. Processing within 24 hours.", "success")
+        flash(
+            f"{pack['name']} request submitted for {phone}. Processing within 24 hours.",
+            "success",
+        )
         return redirect(url_for("my_requests"), 303)
 
     # GET — collect flash messages
@@ -854,7 +1096,7 @@ def redeem():
 @app.route("/my_requests")
 @login_required
 def my_requests():
-    db  = get_db()
+    db = get_db()
     uid = session["user_id"]
     user = get_user(uid)
 
@@ -940,21 +1182,31 @@ def admin_request_action(req_id, action):
         flash("Request not found.", "error")
         return redirect(url_for("admin"), 303)
 
-    status = {"complete": "completed", "fail": "failed", "processing": "processing"}[action]
+    status = {"complete": "completed", "fail": "failed", "processing": "processing"}[
+        action
+    ]
 
     # Refund coins when marking as failed (only if not already failed)
     if status == "failed" and req["status"] != "failed":
         try:
-            add_coins(db, req["user_id"], req["coins_used"],
-                      f"Refund for failed recharge request #{req_id}")
+            add_coins(
+                db,
+                req["user_id"],
+                req["coins_used"],
+                f"Refund for failed recharge request #{req_id}",
+            )
         except WalletError:
             pass  # user may be deleted; log and continue
 
     db.execute("UPDATE recharge_requests SET status=? WHERE id=?", (status, req_id))
     db.commit()
-    log_event(db, EVENT_ADMIN_ACTION,
-              f"Request {req_id} marked {status}",
-              user_id=session.get("user_id"), ip=_get_client_ip())
+    log_event(
+        db,
+        EVENT_ADMIN_ACTION,
+        f"Request {req_id} marked {status}",
+        user_id=session.get("user_id"),
+        ip=_get_client_ip(),
+    )
     return redirect(url_for("admin"), 303)
 
 
@@ -962,10 +1214,10 @@ def admin_request_action(req_id, action):
 @admin_required
 def admin_status_ajax():
     """AJAX status update — returns JSON so the admin page updates without reload."""
-    data       = request.get_json(silent=True) or {}
-    req_id     = data.get("req_id")
+    data = request.get_json(silent=True) or {}
+    req_id = data.get("req_id")
     new_status = data.get("status", "")
-    valid      = ("pending", "processing", "completed", "failed")
+    valid = ("pending", "processing", "completed", "failed")
     if not req_id or new_status not in valid:
         return jsonify({"ok": False, "error": "Invalid parameters"}), 400
     db = get_db()
@@ -979,16 +1231,24 @@ def admin_status_ajax():
     # Refund coins when marking as failed (only if not already failed)
     if new_status == "failed" and row["status"] != "failed":
         try:
-            add_coins(db, row["user_id"], row["coins_used"],
-                      f"Refund for failed recharge request #{req_id}")
+            add_coins(
+                db,
+                row["user_id"],
+                row["coins_used"],
+                f"Refund for failed recharge request #{req_id}",
+            )
         except WalletError:
             pass  # user may be deleted; continue with status update
 
     db.execute("UPDATE recharge_requests SET status=? WHERE id=?", (new_status, req_id))
     db.commit()
-    log_event(db, EVENT_ADMIN_ACTION,
-              f"AJAX status update: #{req_id} → {new_status}",
-              user_id=session.get("user_id"), ip=_get_client_ip())
+    log_event(
+        db,
+        EVENT_ADMIN_ACTION,
+        f"AJAX status update: #{req_id} → {new_status}",
+        user_id=session.get("user_id"),
+        ip=_get_client_ip(),
+    )
     return jsonify({"ok": True, "req_id": req_id, "status": new_status})
 
 
@@ -997,7 +1257,8 @@ def admin_status_ajax():
 def admin_export_pending():
     """Download pending requests as CSV — filename includes today's date."""
     import csv, io
-    db   = get_db()
+
+    db = get_db()
     rows = db.execute(
         """SELECT r.id, u.name AS user_name, r.phone_number, r.operator,
                   r.recharge_pack, r.recharge_amount, r.coins_used, r.created_at
@@ -1008,19 +1269,32 @@ def admin_export_pending():
     ).fetchall()
 
     buf = io.StringIO()
-    w   = csv.writer(buf)
-    w.writerow(["ID", "User", "Phone", "Operator", "Pack", "Amount (INR)", "Coins Used", "Submitted At"])
+    w = csv.writer(buf)
+    w.writerow(
+        [
+            "ID",
+            "User",
+            "Phone",
+            "Operator",
+            "Pack",
+            "Amount (INR)",
+            "Coins Used",
+            "Submitted At",
+        ]
+    )
     for r in rows:
-        w.writerow([
-            r["id"],
-            r["user_name"],
-            decode_phone(r["phone_number"]),
-            r["operator"],
-            r["recharge_pack"],
-            r["recharge_amount"],
-            r["coins_used"],
-            r["created_at"][:16].replace("T", " "),
-        ])
+        w.writerow(
+            [
+                r["id"],
+                r["user_name"],
+                decode_phone(r["phone_number"]),
+                r["operator"],
+                r["recharge_pack"],
+                r["recharge_amount"],
+                r["coins_used"],
+                r["created_at"][:16].replace("T", " "),
+            ]
+        )
 
     filename = f"pending_requests_{date.today().isoformat().replace('-', '_')}.csv"
     return app.response_class(
@@ -1036,7 +1310,11 @@ def inject_helpers():
     def get_user_coins():
         if "user_id" not in session:
             return 0
-        row = get_db().execute("SELECT coins FROM users WHERE id=?", (session["user_id"],)).fetchone()
+        row = (
+            get_db()
+            .execute("SELECT coins FROM users WHERE id=?", (session["user_id"],))
+            .fetchone()
+        )
         return row["coins"] if row else 0
 
     # Per-session CSRF token (regenerated on new session)
@@ -1060,7 +1338,7 @@ def secret_admin_panel():
         return redirect("/secret-admin-panel", 303)
 
     auth_error = None
-    flash_msg  = None
+    flash_msg = None
 
     # ── POST: login or action ──
     if request.method == "POST":
@@ -1082,9 +1360,13 @@ def secret_admin_panel():
                     (int(req_id),),
                 )
                 db.commit()
-                log_event(db, EVENT_ADMIN_ACTION,
-                          f"Secret ops panel: request #{req_id} marked completed",
-                          user_id=None, ip=_get_client_ip())
+                log_event(
+                    db,
+                    EVENT_ADMIN_ACTION,
+                    f"Secret ops panel: request #{req_id} marked completed",
+                    user_id=None,
+                    ip=_get_client_ip(),
+                )
                 flash_msg = f"Request #{req_id} marked as Charged ✓"
             return redirect("/secret-admin-panel", 303)
 
@@ -1104,27 +1386,31 @@ def secret_admin_panel():
     ).fetchall()
 
     def fmt_row(r):
-        pack_name = r["recharge_pack"].split(" — ")[0] if " — " in r["recharge_pack"] else r["recharge_pack"]
+        pack_name = (
+            r["recharge_pack"].split(" — ")[0]
+            if " — " in r["recharge_pack"]
+            else r["recharge_pack"]
+        )
         return {
-            "id":         r["id"],
-            "user_name":  r["user_name"],
-            "phone":      decode_phone(r["phone_number"]),
-            "operator":   r["operator"],
-            "pack_name":  pack_name,
+            "id": r["id"],
+            "user_name": r["user_name"],
+            "phone": decode_phone(r["phone_number"]),
+            "operator": r["operator"],
+            "pack_name": pack_name,
             "coins_used": r["coins_used"],
-            "status":     r["status"],
+            "status": r["status"],
             "created_at": r["created_at"][:16].replace("T", " "),
         }
 
-    all_rows  = [fmt_row(r) for r in rows]
-    pending   = [r for r in all_rows if r["status"] == "pending"]
-    history   = [r for r in all_rows if r["status"] != "pending"]
+    all_rows = [fmt_row(r) for r in rows]
+    pending = [r for r in all_rows if r["status"] == "pending"]
+    history = [r for r in all_rows if r["status"] != "pending"]
 
     stats = {
-        "total":     len(all_rows),
-        "pending":   len(pending),
+        "total": len(all_rows),
+        "pending": len(pending),
         "completed": sum(1 for r in all_rows if r["status"] == "completed"),
-        "coins":     sum(r["coins_used"] for r in all_rows),
+        "coins": sum(r["coins_used"] for r in all_rows),
     }
 
     return render_template(
@@ -1135,6 +1421,38 @@ def secret_admin_panel():
         stats=stats,
         flash_msg=flash_msg,
     )
+
+
+# ── Routes: Delete Account ─────────────────────────────────────────────────────
+@app.route("/x/delete-account", methods=["POST"])
+@login_required
+@rate_limited(is_api=True)
+def api_delete_account():
+    uid = session["user_id"]
+    ip = _get_client_ip()
+    db = get_db()
+
+    # Security check to prevent malicious requests
+    if not _check_csrf():
+        log_event(
+            db, EVENT_SPAM_ATTEMPT, "Delete account: bad CSRF", user_id=uid, ip=ip
+        )
+        return jsonify({"success": False, "error": "Invalid request."}), 403
+
+    # Log the event before deleting
+    log_event(db, EVENT_ADMIN_ACTION, f"User deleted their account", user_id=uid, ip=ip)
+
+    # Delete the user and their related data (Prevents database clutter)
+    db.execute("DELETE FROM recharge_requests WHERE user_id=?", (uid,))
+    db.execute("DELETE FROM ad_rewards WHERE user_id=?", (uid,))
+    db.execute("DELETE FROM transactions WHERE user_id=?", (uid,))
+    db.execute("DELETE FROM users WHERE id=?", (uid,))
+    db.commit()
+
+    # Clear the session (Logs the user out automatically)
+    session.clear()
+
+    return jsonify({"success": True, "message": "Account successfully deleted"})
 
 
 if __name__ == "__main__":
