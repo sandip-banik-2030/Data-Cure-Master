@@ -13,6 +13,10 @@ def update_streak(db, user_id: int) -> dict:
         (user_id,),
     ).fetchone()
 
+    # ✅ ADDED SAFETY CHECK: If user is missing in DB, return 0 streak safely!
+    if not user:
+        return _result(0, False, False, 0)
+
     streak = user["streak"] or 0
     last = user["last_active_date"]
 
@@ -30,6 +34,7 @@ def update_streak(db, user_id: int) -> dict:
     bonus_coins = 0
     if user["streak_bonus_date"] != today:
         from services.wallet import add_coins
+
         add_coins(db, user_id, STREAK_BONUS_COINS, f"Day-{streak} streak bonus")
         db.execute(
             "UPDATE users SET streak_bonus_date=? WHERE id=?",
@@ -43,8 +48,14 @@ def update_streak(db, user_id: int) -> dict:
 
 
 def _result(streak, is_new_day, bonus_granted, bonus_coins):
-    progress = int((streak % STREAK_TARGET) / STREAK_TARGET * 100) if STREAK_TARGET else 0
-    days_to_target = STREAK_TARGET - (streak % STREAK_TARGET) if streak % STREAK_TARGET != 0 else STREAK_TARGET
+    progress = (
+        int((streak % STREAK_TARGET) / STREAK_TARGET * 100) if STREAK_TARGET else 0
+    )
+    days_to_target = (
+        STREAK_TARGET - (streak % STREAK_TARGET)
+        if streak % STREAK_TARGET != 0
+        else STREAK_TARGET
+    )
     return {
         "streak": streak,
         "is_new_day": is_new_day,
