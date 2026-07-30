@@ -171,6 +171,13 @@ def login_required(f):
     def decorated(*args, **kwargs):
         if "user_id" not in session:
             return redirect(url_for("login"), 303)
+
+        # Check if user actually exists in DB
+        user = get_user(session["user_id"])
+        if not user:
+            session.clear()
+            return redirect(url_for("login"), 303)
+
         return f(*args, **kwargs)
 
     return decorated
@@ -390,6 +397,11 @@ def dashboard():
     today_data_saved = _sync_today_data(db, uid, today)
     user = get_user(uid)
 
+    # 1. Safety check if DB was reset / user is missing
+    if not user:
+        session.clear()
+        return redirect(url_for("login"), 303)
+
     ads_row = db.execute(
         "SELECT ads_watched FROM ad_rewards WHERE user_id=? AND reward_date=?",
         (uid, today),
@@ -408,7 +420,9 @@ def dashboard():
 
     coins = get_balance(db, uid)
     rupees_balance = coins / COINS_PER_RUPEE
-    daily_target = user["daily_data_target"] if user["daily_data_target"] else 200
+
+    # 2. Safe dict access (uses .get() so it never crashes)
+    daily_target = user.get("daily_data_target") or 200
     target_pct = (
         min(100, round((today_data_saved / daily_target) * 100))
         if daily_target > 0
@@ -448,7 +462,14 @@ def log_data():
     today = date.today().isoformat()
     today_data_saved = _sync_today_data(db, uid, today)
     user = get_user(uid)
-    daily_target = user["daily_data_target"] if user["daily_data_target"] else 200
+
+    # Safety check if user is missing from DB
+    if not user:
+        session.clear()
+        return redirect(url_for("login"), 303)
+
+    # Safe access using .get()
+    daily_target = user.get("daily_data_target") or 200
     target_pct = (
         min(100, round((today_data_saved / daily_target) * 100))
         if daily_target > 0
@@ -688,6 +709,11 @@ def api_dashboard_stats():
 
     today_data_saved = _sync_today_data(db, uid, today)
     user = get_user(uid)
+
+    # Return JSON error if user is missing instead of crashing
+    if not user:
+        return jsonify({"success": False, "error": "User session invalid."}), 401
+
     coins = get_balance(db, uid)
 
     ads_row = db.execute(
@@ -695,15 +721,17 @@ def api_dashboard_stats():
         (uid, today),
     ).fetchone()
     ads_today = ads_row["ads_watched"] if ads_row else 0
-    daily_target = user["daily_data_target"] if user["daily_data_target"] else 200
+
+    # Safe access using .get() with fallback values
+    daily_target = user.get("daily_data_target") or 200
 
     return jsonify(
         {
             "coins": coins,
             "rupees": round(coins / COINS_PER_RUPEE, 2),
             "today_data_saved": today_data_saved,
-            "lifetime_data_saved": user["lifetime_data_saved"],
-            "streak": user["streak"],
+            "lifetime_data_saved": user.get("lifetime_data_saved", 0),
+            "streak": user.get("streak", 0),
             "ads_today": ads_today,
             "daily_data_target": daily_target,
             "target_pct": min(100, round((today_data_saved / daily_target) * 100))
