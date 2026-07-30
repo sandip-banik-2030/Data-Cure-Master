@@ -225,7 +225,8 @@ def rate_limited(is_api=False, redirect_to=None, post_only=True):
 
 # ── Helpers ────────────────────────────────────────────────────────────────────
 def get_user(user_id):
-    return get_db().execute("SELECT * FROM users WHERE id=?", (user_id,)).fetchone()
+    row = get_db().execute("SELECT * FROM users WHERE id=?", (user_id,)).fetchone()
+    return dict(row) if row else None
 
 
 def get_flash_error():
@@ -391,16 +392,15 @@ def dashboard():
     uid = session["user_id"]
     today = date.today().isoformat()
 
-    streak_info = update_streak(db, uid)
-
-    # Sync today's data (resets if new day), then fetch user once
-    today_data_saved = _sync_today_data(db, uid, today)
+    # 1. Check if user exists FIRST
     user = get_user(uid)
-
-    # 1. Safety check if DB was reset / user is missing
     if not user:
         session.clear()
         return redirect(url_for("login"), 303)
+
+        # 2. Perform database sync/streak updates only AFTER validating user
+    streak_info = update_streak(db, uid)
+    today_data_saved = _sync_today_data(db, uid, today)
 
     ads_row = db.execute(
         "SELECT ads_watched FROM ad_rewards WHERE user_id=? AND reward_date=?",
