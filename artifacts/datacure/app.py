@@ -72,7 +72,13 @@ app = Flask(__name__)
 app.secret_key = os.environ.get("SESSION_SECRET", "datacure-dev-secret-2024")
 app.config["SESSION_COOKIE_HTTPONLY"] = True
 app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
-app.config["PERMANENT_SESSION_LIFETIME"] = timedelta(days=30)
+app.config["PERMANENT_SESSION_LIFETIME"] = timedelta(days=3650)
+
+
+@app.before_request
+def make_session_permanent():
+    session.permanent = True
+
 
 COINS_PER_100MB = 5
 COINS_PER_AD = 10
