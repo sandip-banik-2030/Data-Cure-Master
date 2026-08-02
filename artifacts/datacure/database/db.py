@@ -9,15 +9,28 @@ SCHEMA_PATH = os.path.join(os.path.dirname(__file__), "schema.sql")
 
 def get_db():
     if "db" not in g:
-        conn = sqlite3.connect(os.path.abspath(DB_PATH))
-        conn.row_factory = sqlite3.Row
-        conn.execute("PRAGMA journal_mode=WAL")
-        conn.execute("PRAGMA foreign_keys=ON")
-        g.db = conn
+        db_url = os.environ.get("DATABASE_URL")
+        if db_url:
+            # Connect to Supabase Cloud PostgreSQL on Render
+            import psycopg2
+            from psycopg2.extras import RealDictCursor
+
+            g.db = psycopg2.connect(db_url, cursor_factory=RealDictCursor)
+        else:
+            # Fallback to local SQLite when testing in Replit
+            conn = sqlite3.connect(os.path.abspath(DB_PATH))
+            conn.row_factory = sqlite3.Row
+            conn.execute("PRAGMA journal_mode=WAL")
+            conn.execute("PRAGMA foreign_keys=ON")
+            g.db = conn
     return g.db
 
 
 def init_db(app):
+    # Skip SQLite setup on Render because tables live in Supabase
+    if os.environ.get("DATABASE_URL"):
+        return
+
     with app.app_context():
         db = sqlite3.connect(os.path.abspath(DB_PATH))
         db.row_factory = sqlite3.Row
@@ -33,14 +46,29 @@ def init_db(app):
 def _migrate(conn):
     cols = {r[1] for r in conn.execute("PRAGMA table_info(users)")}
     user_migrations = [
-        ("streak_bonus_date",  "ALTER TABLE users ADD COLUMN streak_bonus_date TEXT"),
-        ("lifetime_data_saved","ALTER TABLE users ADD COLUMN lifetime_data_saved INTEGER NOT NULL DEFAULT 0"),
-        ("total_ads_watched",  "ALTER TABLE users ADD COLUMN total_ads_watched INTEGER NOT NULL DEFAULT 0"),
-        ("is_admin",           "ALTER TABLE users ADD COLUMN is_admin INTEGER NOT NULL DEFAULT 0"),
-        ("daily_data_target",  "ALTER TABLE users ADD COLUMN daily_data_target INTEGER NOT NULL DEFAULT 200"),
-        ("today_data_saved",   "ALTER TABLE users ADD COLUMN today_data_saved INTEGER NOT NULL DEFAULT 0"),
-        ("last_data_date",     "ALTER TABLE users ADD COLUMN last_data_date TEXT"),
-        ("target_bonus_date",  "ALTER TABLE users ADD COLUMN target_bonus_date TEXT"),
+        ("streak_bonus_date", "ALTER TABLE users ADD COLUMN streak_bonus_date TEXT"),
+        (
+            "lifetime_data_saved",
+            "ALTER TABLE users ADD COLUMN lifetime_data_saved INTEGER NOT NULL DEFAULT 0",
+        ),
+        (
+            "total_ads_watched",
+            "ALTER TABLE users ADD COLUMN total_ads_watched INTEGER NOT NULL DEFAULT 0",
+        ),
+        (
+            "is_admin",
+            "ALTER TABLE users ADD COLUMN is_admin INTEGER NOT NULL DEFAULT 0",
+        ),
+        (
+            "daily_data_target",
+            "ALTER TABLE users ADD COLUMN daily_data_target INTEGER NOT NULL DEFAULT 200",
+        ),
+        (
+            "today_data_saved",
+            "ALTER TABLE users ADD COLUMN today_data_saved INTEGER NOT NULL DEFAULT 0",
+        ),
+        ("last_data_date", "ALTER TABLE users ADD COLUMN last_data_date TEXT"),
+        ("target_bonus_date", "ALTER TABLE users ADD COLUMN target_bonus_date TEXT"),
     ]
     for col, sql in user_migrations:
         if col not in cols:
@@ -71,6 +99,8 @@ def _migrate(conn):
     for row in rows:
         expected = base64.b64encode(row[1].encode()).decode()
         if row[2] != expected:
-            conn.execute("UPDATE users SET phone_encrypted=? WHERE id=?", (expected, row[0]))
+            conn.execute(
+                "UPDATE users SET phone_encrypted=? WHERE id=?", (expected, row[0])
+            )
 
     conn.commit()
