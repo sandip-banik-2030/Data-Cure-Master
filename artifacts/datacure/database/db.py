@@ -3,6 +3,30 @@ import os
 import base64
 from flask import g
 
+
+class PgWrapper:
+    """Wrapper to make psycopg2 connection act identically to sqlite3.Connection in Flask."""
+
+    def __init__(self, conn):
+        self.conn = conn
+
+    def execute(self, sql, params=()):
+        # Convert SQLite '?' placeholders to PostgreSQL '%s' placeholders
+        sql_pg = sql.replace("?", "%s")
+        cur = self.conn.cursor()
+        cur.execute(sql_pg, params)
+        return cur
+
+    def commit(self):
+        self.conn.commit()
+
+    def rollback(self):
+        self.conn.rollback()
+
+    def close(self):
+        self.conn.close()
+
+
 DB_PATH = os.path.join(os.path.dirname(__file__), "..", "datacure.db")
 SCHEMA_PATH = os.path.join(os.path.dirname(__file__), "schema.sql")
 
@@ -13,9 +37,11 @@ def get_db():
         if db_url:
             # Connect to Supabase Cloud PostgreSQL on Render
             import psycopg2
-            from psycopg2.extras import RealDictCursor
+            from psycopg2.extras import DictCursor
 
-            g.db = psycopg2.connect(db_url, cursor_factory=RealDictCursor)
+            raw_conn = psycopg2.connect(db_url, cursor_factory=DictCursor)
+            raw_conn.autocommit = True
+            g.db = PgWrapper(raw_conn)
         else:
             # Fallback to local SQLite when testing in Replit
             conn = sqlite3.connect(os.path.abspath(DB_PATH))
@@ -74,8 +100,6 @@ def _migrate(conn):
         if col not in cols:
             conn.execute(sql)
 
-    # Create security_logs table if missing (schema.sql handles new installs;
-    # this handles upgrades from older DB files)
     conn.execute("""
         CREATE TABLE IF NOT EXISTS security_logs (
             id          INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -93,8 +117,6 @@ def _migrate(conn):
         "CREATE INDEX IF NOT EXISTS idx_security_logs_user ON security_logs(user_id, created_at DESC)"
     )
 
-    # Re-key auth: store base64(name) in phone_encrypted so users log in with their User ID.
-    # Idempotent — only updates rows where the stored value doesn't already match base64(name).
     rows = conn.execute("SELECT id, name, phone_encrypted FROM users").fetchall()
     for row in rows:
         expected = base64.b64encode(row[1].encode()).decode()
