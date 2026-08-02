@@ -1,11 +1,47 @@
 import sqlite3
 import os
 import base64
+import datetime
 from flask import g
 
 
+class RowWrapper:
+    """Wraps PostgreSQL DictRow to convert datetime objects to ISO text strings,
+    matching SQLite string format so templates like item['created_at'][:16] work seamlessly.
+    """
+
+    def __init__(self, row):
+        self._row = row
+
+    def __getitem__(self, key):
+        val = self._row[key]
+        if isinstance(val, (datetime.datetime, datetime.date)):
+            return val.strftime("%Y-%m-%dT%H:%M:%S")
+        return val
+
+    def get(self, key, default=None):
+        try:
+            return self[key]
+        except (KeyError, IndexError):
+            return default
+
+    def keys(self):
+        return self._row.keys()
+
+    def items(self):
+        for k in self.keys():
+            yield k, self[k]
+
+    def __iter__(self):
+        for i in range(len(self._row)):
+            yield self[i]
+
+    def __len__(self):
+        return len(self._row)
+
+
 class PgCursorWrapper:
-    """Cursor wrapper that adds SQLite-style .lastrowid support for PostgreSQL."""
+    """Cursor wrapper adding .lastrowid support and auto-converting dates for PostgreSQL."""
 
     def __init__(self, cur, lastrowid=None):
         self.cur = cur
@@ -13,13 +49,15 @@ class PgCursorWrapper:
 
     def fetchone(self):
         try:
-            return self.cur.fetchone()
+            r = self.cur.fetchone()
+            return RowWrapper(r) if r else None
         except Exception:
             return None
 
     def fetchall(self):
         try:
-            return self.cur.fetchall()
+            rows = self.cur.fetchall()
+            return [RowWrapper(r) for r in rows] if rows else []
         except Exception:
             return []
 
@@ -28,7 +66,9 @@ class PgCursorWrapper:
         return self.cur.rowcount
 
     def __iter__(self):
-        return iter(self.cur)
+        if self.cur:
+            for r in self.cur:
+                yield RowWrapper(r)
 
 
 class PgWrapper:
@@ -43,7 +83,6 @@ class PgWrapper:
 
         try:
             cur = self.conn.cursor()
-            # If inserting and no RETURNING clause exists, automatically add RETURNING id
             if is_insert and "RETURNING" not in sql_pg.upper():
                 sql_pg_returning = sql_pg + " RETURNING id"
                 cur.execute(sql_pg_returning, params)
