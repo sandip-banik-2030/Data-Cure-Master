@@ -4,21 +4,67 @@ import base64
 from flask import g
 
 
+class PgCursorWrapper:
+    """Cursor wrapper that adds SQLite-style .lastrowid support for PostgreSQL."""
+
+    def __init__(self, cur, lastrowid=None):
+        self.cur = cur
+        self.lastrowid = lastrowid
+
+    def fetchone(self):
+        try:
+            return self.cur.fetchone()
+        except Exception:
+            return None
+
+    def fetchall(self):
+        try:
+            return self.cur.fetchall()
+        except Exception:
+            return []
+
+    @property
+    def rowcount(self):
+        return self.cur.rowcount
+
+    def __iter__(self):
+        return iter(self.cur)
+
+
 class PgWrapper:
-    """Wrapper to make psycopg2 connection act identically to sqlite3.Connection in Flask."""
+    """Wrapper to make psycopg2 connection act identically to sqlite3.Connection."""
 
     def __init__(self, conn):
         self.conn = conn
 
     def execute(self, sql, params=()):
-        # Convert SQLite '?' placeholders to PostgreSQL '%s' placeholders
         sql_pg = sql.replace("?", "%s")
-        cur = self.conn.cursor()
-        cur.execute(sql_pg, params)
-        return cur
+        is_insert = sql_pg.strip().upper().startswith("INSERT")
+
+        try:
+            cur = self.conn.cursor()
+            # If inserting and no RETURNING clause exists, automatically add RETURNING id
+            if is_insert and "RETURNING" not in sql_pg.upper():
+                sql_pg_returning = sql_pg + " RETURNING id"
+                cur.execute(sql_pg_returning, params)
+                res = cur.fetchone()
+                last_id = None
+                if res:
+                    last_id = res["id"] if hasattr(res, "keys") else res[0]
+                return PgCursorWrapper(cur, lastrowid=last_id)
+            else:
+                cur.execute(sql_pg, params)
+                return PgCursorWrapper(cur)
+        except Exception as e:
+            self.conn.rollback()
+            raise e
 
     def commit(self):
-        self.conn.commit()
+        try:
+            self.conn.commit()
+        except Exception as e:
+            self.conn.rollback()
+            raise e
 
     def rollback(self):
         self.conn.rollback()
@@ -35,7 +81,6 @@ def get_db():
     if "db" not in g:
         db_url = os.environ.get("DATABASE_URL")
         if db_url:
-            # Connect to Supabase Cloud PostgreSQL on Render
             import psycopg2
             from psycopg2.extras import DictCursor
 
@@ -43,7 +88,6 @@ def get_db():
             raw_conn.autocommit = True
             g.db = PgWrapper(raw_conn)
         else:
-            # Fallback to local SQLite when testing in Replit
             conn = sqlite3.connect(os.path.abspath(DB_PATH))
             conn.row_factory = sqlite3.Row
             conn.execute("PRAGMA journal_mode=WAL")
@@ -53,7 +97,6 @@ def get_db():
 
 
 def init_db(app):
-    # Skip SQLite setup on Render because tables live in Supabase
     if os.environ.get("DATABASE_URL"):
         return
 
