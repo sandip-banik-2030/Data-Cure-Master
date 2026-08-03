@@ -2,6 +2,7 @@ import sqlite3
 import os
 import base64
 import datetime
+import re
 from flask import g
 
 
@@ -79,6 +80,15 @@ class PgWrapper:
 
     def execute(self, sql, params=()):
         sql_pg = sql.replace("%", "%%").replace("?", "%s")
+        sql_pg = re.sub(
+            r"datetime\(\s*'now'\s*,\s*'([^']+)'\s*\)",
+            r"(NOW() + INTERVAL '\1')",
+            sql_pg,
+            flags=re.IGNORECASE,
+        )
+        sql_pg = re.sub(
+            r"datetime\(\s*'now'\s*\)", r"NOW()", sql_pg, flags=re.IGNORECASE
+        )
         is_insert = sql_pg.strip().upper().startswith("INSERT")
 
         try:
