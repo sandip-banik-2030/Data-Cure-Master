@@ -135,7 +135,15 @@ def get_db():
 
             raw_conn = psycopg2.connect(db_url, cursor_factory=DictCursor)
             raw_conn.autocommit = True
+
+            # Ensure 'type' column exists in transactions table
+            with raw_conn.cursor() as cur:
+                cur.execute(
+                    "ALTER TABLE transactions ADD COLUMN IF NOT EXISTS type TEXT;"
+                )
+
             g.db = PgWrapper(raw_conn)
+
         else:
             conn = sqlite3.connect(os.path.abspath(DB_PATH))
             conn.row_factory = sqlite3.Row
