@@ -78,7 +78,7 @@ class PgWrapper:
         self.conn = conn
 
     def execute(self, sql, params=()):
-        sql_pg = sql.replace("?", "%s")
+        sql_pg = sql.replace("%", "%%").replace("?", "%s")
         is_insert = sql_pg.strip().upper().startswith("INSERT")
 
         try:
