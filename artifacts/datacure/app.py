@@ -601,13 +601,18 @@ def api_log_data():
     # ── 4. Minute-level duplicate guard ────────────────────────────────────
     # Prevents a burst of concurrent requests that all pass the token check
     # before the first write completes (e.g., two tabs submitting at once).
+    import datetime
+
+    sixty_sec_ago = (
+        datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(seconds=60)
+    ).strftime("%Y-%m-%d %H:%M:%S")
+
     recent_dup = db.execute(
-        """SELECT id FROM transactions
-           WHERE user_id = ?
-             AND description LIKE 'Logged % MB saved'
-             AND created_at > datetime('now', '-60 seconds')
-           LIMIT 1""",
-        (user_id,),
+        """SELECT id FROM transactions 
+           WHERE user_id = ? 
+           AND type = 'data_earn' 
+           AND created_at > ?""",
+        (user_id, sixty_sec_ago),
     ).fetchone()
     if recent_dup:
         log_event(
