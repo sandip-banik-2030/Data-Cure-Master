@@ -374,11 +374,11 @@
 
 {% endblock %} {% block scripts %}
 <script>
-  const COINS_PER_AD    = {{ coins_per_ad }};
-  const MAX_ADS         = {{ max_ads }};
-  const AD_DURATION     = {{ ad_duration }};
-  const CSRF_TOKEN      = "{{ csrf_token }}";
-  const AD_BATCH_SIZE   = {{ ad_batch_size }};
+  const COINS_PER_AD     = {{ coins_per_ad }};
+  const MAX_ADS          = {{ max_ads }};
+  const AD_DURATION      = {{ ad_duration }};
+  const CSRF_TOKEN       = "{{ csrf_token }}";
+  const AD_BATCH_SIZE    = {{ ad_batch_size }};
   const AD_BATCH_CD_SECS = {{ ad_batch_cooldown }};
 
   // ── State machine ──────────────────────────────────────────
@@ -436,8 +436,6 @@
 
   function onCooldownEnd() {
     const btn = document.getElementById('watch-btn');
-
-    // 🛡️ Check if the user reached the daily limit (15 ads)
     const currentAds = parseInt(document.getElementById('ads-today-count')?.textContent || '0');
 
     if (currentAds >= MAX_ADS) {
@@ -474,9 +472,9 @@
   function updateBatchLabel(count) {
     const lbl = document.getElementById('batch-label');
     if (!lbl) return;
-    if (inCooldown)       lbl.textContent = 'Cooldown active';
-    else if (count > 0)   lbl.textContent = count + '/' + AD_BATCH_SIZE + ' in batch';
-    else                  lbl.textContent = AD_BATCH_SIZE + '-ad batch';
+    if (inCooldown)        lbl.textContent = 'Cooldown active';
+    else if (count > 0)    lbl.textContent = count + '/' + AD_BATCH_SIZE + ' in batch';
+    else                   lbl.textContent = AD_BATCH_SIZE + '-ad batch';
   }
 
   // ── Open modal ─────────────────────────────────────────────
@@ -485,7 +483,8 @@
     setModalState('loading');
     showOverlay(true);
     adState = 'starting';
-    document.getElementById('ad-close-btn').disabled = true;
+    const closeBtn = document.getElementById('ad-close-btn');
+    if (closeBtn) closeBtn.disabled = true;
 
     fetch('/x/ad/start', {
       method: 'POST',
@@ -496,7 +495,6 @@
     .then(data => {
       if (!data.ok) {
         if (data.reason === 'batch_cooldown') {
-          // Server says cooldown — show cooldown modal state
           adState = 'idle';
           inCooldown  = true;
           cdSecsLeft  = data.cooldown_secs || AD_BATCH_CD_SECS;
@@ -514,7 +512,6 @@
       adToken   = data.token;
       remaining = data.duration || AD_DURATION;
       adState   = 'watching';
-      // Update batch position pill
       const pill = document.getElementById('modal-batch-pos');
       if (pill) pill.textContent = data.batch_pos || (batchPos + 1);
       setModalState('watching');
@@ -530,13 +527,13 @@
     const txt  = document.getElementById('modal-timer-text');
     const circ = 263.89;
     remaining  = duration;
-    txt.textContent = remaining;
+    if (txt) txt.textContent = remaining;
 
     timerIval = setInterval(() => {
       remaining--;
-      txt.textContent = remaining;
+      if (txt) txt.textContent = remaining;
       const progress = (duration - remaining) / duration;
-      arc.style.strokeDashoffset = circ * (1 - progress);
+      if (arc) arc.style.strokeDashoffset = circ * (1 - progress);
       if (remaining <= 0) {
         clearInterval(timerIval);
         completeAd();
@@ -549,16 +546,16 @@
     const btn    = document.getElementById('ad-close-btn');
     const cdSpan = document.getElementById('ad-close-countdown');
     let   left   = duration;
-    cdSpan.textContent = left + 's';
+    if (cdSpan) cdSpan.textContent = left + 's';
 
     closeIval = setInterval(() => {
       left--;
       if (left <= 0) {
         clearInterval(closeIval);
-        cdSpan.textContent = '';
-        if (adState !== 'watching') btn.disabled = false;
+        if (cdSpan) cdSpan.textContent = '';
+        if (adState !== 'watching' && btn) btn.disabled = false;
       } else {
-        cdSpan.textContent = left + 's';
+        if (cdSpan) cdSpan.textContent = left + 's';
       }
     }, 1000);
   }
@@ -580,35 +577,42 @@
         batchPos   = data.batch_size && data.cooldown_triggered ? 0 : (data.batch_pos || batchPos + 1);
         const newAdsToday = data.ads_today;
         updateAdStats(newAdsToday, data.total_coins);
-        document.getElementById('modal-balance-val').textContent = data.total_coins;
+
+        const balVal = document.getElementById('modal-balance-val');
+        if (balVal) balVal.textContent = data.total_coins;
 
         const sub = data.remaining > 0
           ? `You have ${data.remaining} more ad${data.remaining === 1 ? '' : 's'} available today.`
           : 'Daily limit reached. Come back tomorrow!';
-        document.getElementById('modal-success-sub').textContent = sub;
+        const successSub = document.getElementById('modal-success-sub');
+        if (successSub) successSub.textContent = sub;
 
-        // Batch banner
         const batchBanner = document.getElementById('modal-batch-banner');
-        if (data.cooldown_triggered) {
-          batchBanner.style.display = 'block';
-          batchBanner.innerHTML     = `⏸ <strong>Batch of ${data.batch_size} done!</strong> 2-min cooldown starts now.`;
-          batchBanner.className     = 'modal-batch-banner batch-banner-cooldown';
-        } else {
-          batchBanner.style.display = 'block';
-          batchBanner.innerHTML     = `🎯 Ad ${data.batch_pos} of ${data.batch_size} in this batch`;
-          batchBanner.className     = 'modal-batch-banner';
+        if (batchBanner) {
+          if (data.cooldown_triggered) {
+            batchBanner.style.display = 'block';
+            batchBanner.innerHTML     = `⏸ <strong>Batch of ${data.batch_size} done!</strong> 2-min cooldown starts now.`;
+            batchBanner.className     = 'modal-batch-banner batch-banner-cooldown';
+          } else {
+            batchBanner.style.display = 'block';
+            batchBanner.innerHTML     = `🎯 Ad ${data.batch_pos} of ${data.batch_size} in this batch`;
+            batchBanner.className     = 'modal-batch-banner';
+          }
         }
 
         setModalState('success');
-        document.getElementById('ad-close-btn').disabled = false;
-        document.getElementById('ad-close-countdown').textContent = '';
+        const closeBtn = document.getElementById('ad-close-btn');
+        if (closeBtn) closeBtn.disabled = false;
+        const cdSpan = document.getElementById('ad-close-countdown');
+        if (cdSpan) cdSpan.textContent = '';
+
         renderBatchDots(data.cooldown_triggered ? 0 : data.batch_pos);
         updateBatchLabel(data.cooldown_triggered ? 0 : data.batch_pos);
-        updateCoinDisplays(data.total_coins);
-        pulseWallet();
-        showToast('+' + COINS_PER_AD + ' coins earned from ad!', 'success');
 
-        // If cooldown triggered, start page-level countdown after user closes modal
+        if (typeof updateCoinDisplays === 'function') updateCoinDisplays(data.total_coins);
+        if (typeof pulseWallet === 'function') pulseWallet();
+        if (typeof showToast === 'function') showToast('+' + COINS_PER_AD + ' coins earned from ad!', 'success');
+
         if (data.cooldown_triggered) {
           inCooldown = true;
           cdSecsLeft = data.cooldown_secs || AD_BATCH_CD_SECS;
@@ -660,17 +664,33 @@
     adState   = 'idle';
     adToken   = null;
     remaining = AD_DURATION;
-    document.getElementById('modal-arc').style.strokeDashoffset = '263.89';
-    document.getElementById('modal-timer-text').textContent = AD_DURATION;
-    document.getElementById('ad-close-btn').disabled = true;
-    document.getElementById('ad-close-countdown').textContent = '';
-    document.getElementById('modal-batch-banner').style.display = 'none';
 
-    // If a cooldown was just triggered, start the page-level countdown
+    const arc = document.getElementById('modal-arc');
+    if (arc) arc.style.strokeDashoffset = '263.89';
+    const timerTxt = document.getElementById('modal-timer-text');
+    if (timerTxt) timerTxt.textContent = AD_DURATION;
+    const closeBtn = document.getElementById('ad-close-btn');
+    if (closeBtn) closeBtn.disabled = true;
+    const cdSpan = document.getElementById('ad-close-countdown');
+    if (cdSpan) cdSpan.textContent = '';
+    const batchBanner = document.getElementById('modal-batch-banner');
+    if (batchBanner) batchBanner.style.display = 'none';
+
+    // Check daily limit
+    const currentAds = parseInt(document.getElementById('ads-today-count')?.textContent || '0');
+    if (currentAds >= MAX_ADS) {
+      const btn = document.getElementById('watch-btn');
+      if (btn) {
+        btn.disabled  = true;
+        btn.innerHTML = 'Daily Limit Reached • Come back tomorrow';
+        btn.onclick   = null;
+      }
+      return;
+    }
+
     if (inCooldown && cdSecsLeft > 0) {
       clearInterval(cdIval);
       startPageCooldownCountdown(cdSecsLeft);
-      // Update the watch button to show cooldown
       const btn = document.getElementById('watch-btn');
       if (btn) {
         btn.disabled  = true;
@@ -685,6 +705,18 @@
     showOverlay(false);
     adState = 'idle';
     adToken = null;
+
+    const currentAds = parseInt(document.getElementById('ads-today-count')?.textContent || '0');
+    if (currentAds >= MAX_ADS) {
+      const btn = document.getElementById('watch-btn');
+      if (btn) {
+        btn.disabled  = true;
+        btn.innerHTML = 'Daily Limit Reached • Come back tomorrow';
+        btn.onclick   = null;
+      }
+      return;
+    }
+
     if (inCooldown && cdSecsLeft > 0) {
       clearInterval(cdIval);
       startPageCooldownCountdown(cdSecsLeft);
@@ -698,50 +730,58 @@
 
   // ── UI helpers ─────────────────────────────────────────────
   function showOverlay(show) {
-    document.getElementById('ad-modal-overlay').style.display = show ? 'flex' : 'none';
+    const overlay = document.getElementById('ad-modal-overlay');
+    if (overlay) overlay.style.display = show ? 'flex' : 'none';
     document.body.style.overflow = show ? 'hidden' : '';
   }
 
   function setModalState(state) {
     ['loading','watching','success','error','cooldown'].forEach(s => {
-      document.getElementById('modal-state-' + s).style.display =
-        s === state ? 'flex' : 'none';
+      const el = document.getElementById('modal-state-' + s);
+      if (el) el.style.display = (s === state ? 'flex' : 'none');
     });
   }
 
   function showModalError(msg) {
     adState = 'error';
     clearInterval(timerIval);
-    document.getElementById('modal-error-msg').textContent = msg;
+    const errEl = document.getElementById('modal-error-msg');
+    if (errEl) errEl.textContent = msg;
     setModalState('error');
-    document.getElementById('ad-close-btn').disabled = false;
-    document.getElementById('ad-close-countdown').textContent = '';
+    const closeBtn = document.getElementById('ad-close-btn');
+    if (closeBtn) closeBtn.disabled = false;
+    const cdSpan = document.getElementById('ad-close-countdown');
+    if (cdSpan) cdSpan.textContent = '';
   }
 
   function updateAdStats(adsToday, totalCoins) {
-    const setTxt = (id, val) => { const el = document.getElementById(id); if(el) el.textContent = val; };
+    const setTxt = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
     setTxt('ads-today-count', adsToday);
     setTxt('ads-today-stat',  adsToday);
     setTxt('remaining-stat',  Math.max(0, MAX_ADS - adsToday));
+
     const totalEl = document.getElementById('total-ads-stat');
     if (totalEl) totalEl.textContent = parseInt(totalEl.textContent || 0) + 1;
+
     const adCoinsEl = document.getElementById('ad-coins-stat');
     if (adCoinsEl) adCoinsEl.textContent = parseInt(adCoinsEl.textContent || 0) + COINS_PER_AD;
+
     const bar = document.getElementById('daily-bar');
     if (bar) bar.style.width = Math.min((adsToday / MAX_ADS) * 100, 100) + '%';
-    // ✅ New Code
+
     if (adsToday >= MAX_ADS) {
-        const btn = document.getElementById('watch-btn');
-        if (btn) {
-            btn.textContent = 'Daily Limit Reached • Come back tomorrow';
-            btn.disabled = true;
-        }
-        // Stop any batch cooldown timer from running or re-enabling the button
-        if (cdIval) {
-            clearInterval(cdIval);
-            cdIval = null;
-        }
+      const btn = document.getElementById('watch-btn');
+      if (btn) {
+        btn.innerHTML = 'Daily Limit Reached • Come back tomorrow';
+        btn.disabled = true;
+        btn.onclick = null;
+      }
+      if (cdIval) {
+        clearInterval(cdIval);
+        cdIval = null;
+      }
     }
+  }
 
   document.addEventListener('keydown', e => {
     if (e.key === 'Escape' && adState !== 'watching' && adState !== 'starting') {
