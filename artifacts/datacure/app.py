@@ -55,18 +55,6 @@ from services.security import (
     EVENT_DATA_CAP_HIT,
     EVENT_DATA_DUPE,
 )
-from services.admob import (
-    TEST_MODE as ADMOB_TEST_MODE,
-    ADMOB_APP_ID,
-    BANNER_AD_UNIT_ID,
-    INTERSTITIAL_AD_UNIT_ID,
-    REWARDED_AD_UNIT_ID,
-    AD_BATCH_SIZE,
-    AD_BATCH_COOLDOWN_SECS,
-    get_batch_state,
-    check_cooldown,
-    record_ad_complete as admob_record_complete,
-)
 
 app = Flask(__name__)
 app.secret_key = os.environ.get("SESSION_SECRET", "datacure-dev-secret-2024")
@@ -85,6 +73,9 @@ COINS_PER_AD = 10
 COINS_PER_RUPEE = 100
 MAX_ADS_PER_DAY = 15
 MB_PER_REWARD = 100
+AD_BATCH_SIZE = 5
+AD_BATCH_COOLDOWN_SECS = 60
+AD_DURATION_SECS = 30
 FIXED_OTP = "1234"
 REDEEM_PACKS_LIST = [
     {
@@ -161,6 +152,21 @@ TARGET_BONUS_COINS = 20
 MAX_DATA_TARGET_MB = 500  # User-set daily target cannot exceed the hard cap
 DAILY_DATA_CAP_MB = 500  # Hard ceiling on data logged per user per day
 AD_DURATION_SECS = 15
+
+
+# Ad Batch & Cooldown Helper Functions (Independent of Ads)
+def get_batch_state():
+    return {
+        "batch_count": session.get("batch_count", 0),
+        "in_cooldown": session.get("in_cooldown", False),
+        "cooldown_secs_left": session.get("cooldown_secs_left", 0),
+    }
+
+
+def check_cooldown():
+    in_cooldown = session.get("in_cooldown", False)
+    secs_left = session.get("cooldown_secs_left", 0)
+    return in_cooldown, secs_left
 
 
 # ── DB teardown ────────────────────────────────────────────────────────────────
@@ -451,9 +457,6 @@ def dashboard():
         target_pct=target_pct,
         target_bonus_coins=TARGET_BONUS_COINS,
         max_data_target=MAX_DATA_TARGET_MB,
-        banner_ad_id=BANNER_AD_UNIT_ID,
-        rewarded_ad_id=REWARDED_AD_UNIT_ID,
-        interstitial_ad_id=INTERSTITIAL_AD_UNIT_ID,
     )
 
 
@@ -779,8 +782,6 @@ def rewards():
         batch_count=batch["batch_count"],
         in_cooldown=batch["in_cooldown"],
         cooldown_secs_left=batch["cooldown_secs_left"],
-        admob_test_mode=ADMOB_TEST_MODE,
-        rewarded_ad_unit_id=REWARDED_AD_UNIT_ID,
     )
 
 
@@ -950,7 +951,29 @@ def api_ad_complete():
     remaining = max(0, MAX_ADS_PER_DAY - new_ads_today)
 
     # ── Batch cooldown tracking ────────────────────────────────────────────
-    batch_result = admob_record_complete()
+    # Grant reward coins and update ad watch count (Ready for Unity Ads / BitLabs callback)
+    db = get_db()
+    cursor = db.cursor()
+
+    # Increment user coins (+10 DC Coins per rewarded video)
+    cursor.execute(
+        "UPDATE users SET coins = coins + 10, ads_watched = ads_watched + 1 WHERE id = ?",
+        (uid,),
+    )
+    db.commit()
+
+    # Get updated stats for the JSON response (Separated for PostgreSQL compatibility)
+    cursor.execute("SELECT coins, ads_watched FROM users WHERE id = ?", (uid,))
+    user_row = cursor.fetchone()
+    new_balance = user_row["coins"]
+    new_ads_today = user_row["ads_watched"]
+
+    batch_result = {
+        "ads_in_batch": new_ads_today % AD_BATCH_SIZE,
+        "batch_size": AD_BATCH_SIZE,
+        "cooldown_triggered": False,
+        "cooldown_secs": 0,
+    }
 
     log_event(
         db,
