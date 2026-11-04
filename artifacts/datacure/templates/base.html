@@ -29,7 +29,6 @@
   </div>
 </header>
 
-
 <nav class="bottom-nav" role="navigation" aria-label="Main navigation">
   <a href="{{ url_for('dashboard') }}" class="bnav-item {% if request.endpoint == 'dashboard' %}active{% endif %}" aria-label="Home">
     <div class="bnav-icon-wrap">
@@ -91,6 +90,47 @@
 </main>
 
 <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+
+<!-- Unity Ads Initialization, Banner, and Interstitial Helper Script -->
+<script>
+  document.addEventListener("deviceready", function() {
+      if (window.Capacitor && window.Capacitor.Plugins.UnityAds) {
+          // Initialize Unity SDK with your Game ID
+          window.Capacitor.Plugins.UnityAds.initialize({
+              gameId: "800424153",
+              testMode: false
+          }).then(() => {
+              console.log("Unity Ads initialized successfully");
+              // Display Banner Ad at the bottom footer right after init
+              window.Capacitor.Plugins.UnityAds.showBanner({
+                  placementId: "BP_Banner_Android",
+                  position: "BOTTOM_CENTER"
+              });
+          }).catch(err => {
+              console.error("Unity Ads initialization error:", err);
+          });
+      }
+  }, false);
+
+  // Global Interstitial Ad Helper function for Recharge & Data logging
+  function showInterstitialAd(callback) {
+      if (window.Capacitor && window.Capacitor.Plugins.UnityAds) {
+          window.Capacitor.Plugins.UnityAds.showInterstitial({
+              placementId: "BP_Interstitial_Android"
+          }).then(() => {
+              if (typeof callback === 'function') callback();
+          }).catch(err => {
+              console.error("Interstitial Ad Error:", err);
+              if (typeof callback === 'function') callback();
+          });
+      } else {
+          // Browser test mode fallback
+          console.warn("Browser test mode: Interstitial simulated.");
+          if (typeof callback === 'function') callback();
+      }
+  }
+</script>
+
 {% block scripts %}{% endblock %}
 </body>
 </html>

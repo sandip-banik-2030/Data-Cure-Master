@@ -463,6 +463,7 @@
       const closeBtn = document.getElementById('ad-close-btn');
       if (closeBtn) closeBtn.disabled = true;
 
+      // 1. First, call your backend to start the ad session & get a secure token
       fetch('/x/ad/start', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'X-DC-CSRF': CSRF_TOKEN },
@@ -486,14 +487,42 @@
           showModalError(msg);
           return;
         }
-        adToken   = data.token;
+
+        adToken = data.token;
         remaining = data.duration || AD_DURATION;
-        adState   = 'watching';
-        const pill = document.getElementById('modal-batch-pos');
-        if (pill) pill.textContent = data.batch_pos || (batchPos + 1);
-        setModalState('watching');
-        startCountdown(remaining);
-        startCloseLockdown(remaining);
+
+        // 2. CHECK IF RUNNING NATIVELY ON ANDROID (Unity Ads Integration)
+        if (window.Capacitor && window.Capacitor.Plugins.UnityAds) {
+          // Hide loading spinner and launch Unity Rewarded Ad
+          setModalState('watching');
+
+          window.Capacitor.Plugins.UnityAds.showRewarded({
+            placementId: "BP_Rewarded_Android"
+          }).then((result) => {
+            if (result && result.completed) {
+              // User watched the full Unity ad -> Claim reward from backend
+              completeAd();
+            } else {
+              // User skipped the ad
+              abortAd('user_skipped');
+              showModalError('Ad skipped. You must watch the full ad to earn coins.');
+            }
+          }).catch(err => {
+            console.error("Unity Ad Error:", err);
+            abortAd('ad_failed_to_load');
+            showModalError('Failed to load ad. Please check your connection.');
+          });
+
+        } else {
+          // 3. BROWSER FALLBACK (For testing in Replit / PC browser)
+          adState = 'watching';
+          const pill = document.getElementById('modal-batch-pos');
+          if (pill) pill.textContent = data.batch_pos || (batchPos + 1);
+          setModalState('watching');
+          startCountdown(remaining);
+          startCloseLockdown(remaining);
+        }
+
       })
       .catch(() => showModalError('Network error. Please check your connection.'));
     }
