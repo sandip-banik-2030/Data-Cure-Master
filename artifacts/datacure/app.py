@@ -155,6 +155,18 @@ MAX_DATA_TARGET_MB = 500
 DAILY_DATA_CAP_MB = 500
 
 
+# ── Template Global Functions ──────────────────────────────────────────────────
+@app.template_global()
+def get_user_coins():
+    if "user_id" not in session:
+        return 0
+    try:
+        db = get_db()
+        return get_balance(db, session["user_id"])
+    except Exception:
+        return 0
+
+
 # ── Referral Helper Functions ──────────────────────────────────────────────────
 def generate_secure_ref_code(user_id):
     salt = "DatacureSecureSalt2026_NexoraByte"
