@@ -571,6 +571,22 @@ def requests_page():
     )
 
 
+# ── Routes: Redeem Page ────────────────────────────────────────────────────────
+@app.route("/redeem")
+@login_required
+def redeem():
+    db = get_db()
+    uid = session["user_id"]
+    user = get_user(uid)
+    if not user:
+        session.clear()
+        return redirect(url_for("login"), 303)
+
+    return render_template(
+        "redeem.html", user=user, packs=REDEEM_PACKS_LIST, decode_phone=decode_phone
+    )
+
+
 # ── Routes: BitLabs Webhook Callback (Server-to-Server) ───────────────────────
 @app.route("/x/bitlabs/callback", methods=["GET", "POST"])
 def bitlabs_callback():
