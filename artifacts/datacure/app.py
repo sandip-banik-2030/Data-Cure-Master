@@ -2,6 +2,8 @@ import os
 import math
 import secrets
 import time
+import hashlib
+import datetime
 from datetime import date, timedelta
 from functools import wraps
 
@@ -149,12 +151,58 @@ ACTIVE_STATUSES = ("pending", "processing")
 SECRET_ADMIN_PASSWORD = "datacure-ops-2024"
 SECRET_ADMIN_SESSION_KEY = "secret_admin_authed"
 TARGET_BONUS_COINS = 20
-MAX_DATA_TARGET_MB = 500  # User-set daily target cannot exceed the hard cap
-DAILY_DATA_CAP_MB = 500  # Hard ceiling on data logged per user per day
-AD_DURATION_SECS = 15
+MAX_DATA_TARGET_MB = 500
+DAILY_DATA_CAP_MB = 500
 
 
-# Ad Batch & Cooldown Helper Functions (Independent of Ads)
+# ── Referral Helper Functions ──────────────────────────────────────────────────
+def generate_secure_ref_code(user_id):
+    salt = "DatacureSecureSalt2026_NexoraByte"
+    raw = f"{user_id}-{salt}"
+    return "DC" + hashlib.sha256(raw.encode()).hexdigest()[:6].upper()
+
+
+def process_user_milestone_completion(db, user_id, earned_coins):
+    """
+    Triggers when User B earns coins or completes a BitLabs task.
+    Unlocks 500 coins for User A if User B crosses the threshold.
+    """
+    row = db.execute("SELECT * FROM users WHERE id=?", (user_id,)).fetchone()
+    if not row:
+        return
+    user = dict(row)
+
+    if user.get("referral_status") == "PENDING_MILESTONE":
+        total_earned_check = db.execute(
+            "SELECT COALESCE(SUM(amount), 0) as total FROM transactions WHERE user_id=? AND amount > 0",
+            (user_id,),
+        ).fetchone()
+
+        current_earned = (
+            total_earned_check["total"] if total_earned_check else earned_coins
+        )
+
+        if current_earned >= 200:
+            db.execute(
+                "UPDATE users SET referral_status = 'COMPLETED' WHERE id=?", (user_id,)
+            )
+
+            referrer_id = user.get("referred_by")
+            if referrer_id:
+                add_coins(
+                    db,
+                    referrer_id,
+                    500,
+                    "Referral bonus: Friend completed task milestone!",
+                )
+                db.execute(
+                    "INSERT INTO transactions (user_id, type, amount, description) VALUES (?, 'referral_bonus', 500, ?)",
+                    (referrer_id, f"Bonus for inviting user #{user_id}"),
+                )
+            db.commit()
+
+
+# ── Ad Batch & Cooldown Helper Functions ───────────────────────────────────────
 def get_batch_state():
     return {
         "batch_count": session.get("batch_count", 0),
@@ -183,13 +231,10 @@ def login_required(f):
     def decorated(*args, **kwargs):
         if "user_id" not in session:
             return redirect(url_for("login"), 303)
-
-        # Check if user actually exists in DB
         user = get_user(session["user_id"])
         if not user:
             session.clear()
             return redirect(url_for("login"), 303)
-
         return f(*args, **kwargs)
 
     return decorated
@@ -201,7 +246,7 @@ def admin_required(f):
         if "user_id" not in session:
             return redirect(url_for("login"), 303)
         user = get_user(session["user_id"])
-        if not user or not user["is_admin"]:
+        if not user or not user.get("is_admin"):
             return redirect(url_for("dashboard"), 303)
         return f(*args, **kwargs)
 
@@ -249,7 +294,6 @@ def get_flash_error():
 
 
 def _sync_today_data(db, user_id: int, today: str) -> int:
-    """Reset today_data_saved if it's a new day. Returns current today_data_saved."""
     row = db.execute(
         "SELECT today_data_saved, last_data_date FROM users WHERE id=?", (user_id,)
     ).fetchone()
@@ -266,7 +310,6 @@ def _sync_today_data(db, user_id: int, today: str) -> int:
 
 
 def _check_target_bonus(db, user_id: int, today_saved: int, today: str) -> dict:
-    """Award +20 coins if daily target is hit for the first time today."""
     row = db.execute(
         "SELECT daily_data_target, target_bonus_date FROM users WHERE id=?", (user_id,)
     ).fetchone()
@@ -284,7 +327,6 @@ def _check_target_bonus(db, user_id: int, today_saved: int, today: str) -> dict:
 
 
 def _reissue_log_token():
-    """Rotate the session log token so the next submission can proceed."""
     session["log_token"] = secrets.token_hex(16)
 
 
@@ -306,6 +348,7 @@ def register():
     if request.method == "POST":
         uid_input = request.form.get("user_id", "").strip()
         password = request.form.get("password", "").strip()
+        incoming_ref = request.form.get("referral_code", "").strip()
 
         err = validate_user_id(uid_input) or validate_password(password)
         if err:
@@ -320,18 +363,35 @@ def register():
             flash("This User ID is already taken. Try a different one.", "error")
             return redirect(url_for("register"), 303)
 
+        referrer_id = None
+        if incoming_ref:
+            ref_row = db.execute(
+                "SELECT id FROM users WHERE ref_code=?", (incoming_ref,)
+            ).fetchone()
+            if ref_row:
+                referrer_id = ref_row["id"]
+
         pw_hash = generate_password_hash(password)
-        db.execute(
-            "INSERT INTO users (name, phone_encrypted, password_hash, coins) VALUES (?,?,?,0)",
-            (uid_input, enc_uid, pw_hash),
+
+        cursor = db.cursor()
+        cursor.execute(
+            "INSERT INTO users (name, phone_encrypted, password_hash, coins, referred_by, referral_status) VALUES (?,?,?,0,?,?)",
+            (uid_input, enc_uid, pw_hash, referrer_id, "PENDING_MILESTONE"),
         )
         db.commit()
-        user = db.execute(
+
+        user_row = db.execute(
             "SELECT id FROM users WHERE phone_encrypted=?", (enc_uid,)
         ).fetchone()
+        new_id = user_row["id"]
+
+        my_ref_code = generate_secure_ref_code(new_id)
+        db.execute("UPDATE users SET ref_code=? WHERE id=?", (my_ref_code, new_id))
+        db.commit()
+
         session.clear()
         session.permanent = True
-        session["user_id"] = user["id"]
+        session["user_id"] = new_id
         return redirect(url_for("dashboard"), 303)
 
     return render_template("register.html", error=get_flash_error())
@@ -364,7 +424,7 @@ def login():
             log_event(
                 get_db(),
                 EVENT_LOGIN_FAILED,
-                f"Unknown User ID attempted login",
+                "Unknown User ID attempted login",
                 user_id=None,
                 ip=ip,
             )
@@ -381,7 +441,7 @@ def login():
             flash("Incorrect password.", "error")
             return redirect(url_for("login"), 303)
 
-        log_event(get_db(), EVENT_LOGIN_SUCCESS, f"Login OK", user_id=user["id"], ip=ip)
+        log_event(get_db(), EVENT_LOGIN_SUCCESS, "Login OK", user_id=user["id"], ip=ip)
         session.clear()
         session.permanent = True
         session["user_id"] = user["id"]
@@ -404,13 +464,11 @@ def dashboard():
     uid = session["user_id"]
     today = date.today().isoformat()
 
-    # 1. Check if user exists FIRST
     user = get_user(uid)
     if not user:
         session.clear()
         return redirect(url_for("login"), 303)
 
-        # 2. Perform database sync/streak updates only AFTER validating user
     streak_info = update_streak(db, uid)
     today_data_saved = _sync_today_data(db, uid, today)
 
@@ -430,10 +488,14 @@ def dashboard():
         (uid,),
     ).fetchall()
 
+    invited_friends = db.execute(
+        "SELECT name, referral_status, created_at FROM users WHERE referred_by=? ORDER BY created_at DESC",
+        (uid,),
+    ).fetchall()
+
     coins = get_balance(db, uid)
     rupees_balance = coins / COINS_PER_RUPEE
 
-    # 2. Safe dict access (uses .get() so it never crashes)
     daily_target = user.get("daily_data_target") or 200
     target_pct = (
         min(100, round((today_data_saved / daily_target) * 100))
@@ -448,6 +510,7 @@ def dashboard():
         max_ads=MAX_ADS_PER_DAY,
         recent=recent,
         redemptions=redemptions,
+        invited_friends=invited_friends,
         rupees_balance=rupees_balance,
         coins_per_rupee=COINS_PER_RUPEE,
         decode_phone=decode_phone,
@@ -458,6 +521,74 @@ def dashboard():
         target_bonus_coins=TARGET_BONUS_COINS,
         max_data_target=MAX_DATA_TARGET_MB,
     )
+
+
+# ── Routes: Requests / History Page ────────────────────────────────────────────
+@app.route("/requests")
+@login_required
+def requests_page():
+    db = get_db()
+    uid = session["user_id"]
+    user = get_user(uid)
+    if not user:
+        session.clear()
+        return redirect(url_for("login"), 303)
+
+    requests_list = db.execute(
+        "SELECT * FROM recharge_requests WHERE user_id=? ORDER BY created_at DESC",
+        (uid,),
+    ).fetchall()
+
+    active_req = db.execute(
+        "SELECT * FROM recharge_requests WHERE user_id=? AND status IN ('pending', 'processing') ORDER BY created_at DESC LIMIT 1",
+        (uid,),
+    ).fetchone()
+
+    invited_friends = db.execute(
+        "SELECT name, referral_status, created_at FROM users WHERE referred_by=? ORDER BY created_at DESC",
+        (uid,),
+    ).fetchall()
+
+    return render_template(
+        "my_requests.html",
+        user=user,
+        requests=requests_list,
+        active_request=active_req,
+        invited_friends=invited_friends,
+        decode_phone=decode_phone,
+    )
+
+
+# ── Routes: BitLabs Webhook Callback (Server-to-Server) ───────────────────────
+@app.route("/x/bitlabs/callback", methods=["GET", "POST"])
+def bitlabs_callback():
+    data = (
+        request.args
+        if request.method == "GET"
+        else (request.get_json(silent=True) or request.form)
+    )
+
+    uid = data.get("uid") or data.get("user_id")
+    reward = data.get("reward") or data.get("coins")
+
+    if not uid or not reward:
+        return jsonify({"success": False, "error": "Missing parameters"}), 400
+
+    try:
+        user_id = int(uid)
+        earned_coins = int(float(reward))
+    except (TypeError, ValueError):
+        return jsonify({"success": False, "error": "Invalid types"}), 400
+
+    db = get_db()
+    user = get_user(user_id)
+    if not user:
+        return jsonify({"success": False, "error": "User not found"}), 404
+
+    add_coins(db, user_id, earned_coins, "BitLabs Offerwall Reward")
+    process_user_milestone_completion(db, user_id, earned_coins)
+
+    return jsonify({"success": True, "message": "Callback processed successfully"})
 
 
 # ── Routes: Log Data ───────────────────────────────────────────────────────────
@@ -472,12 +603,10 @@ def log_data():
     today_data_saved = _sync_today_data(db, uid, today)
     user = get_user(uid)
 
-    # Safety check if user is missing from DB
     if not user:
         session.clear()
         return redirect(url_for("login"), 303)
 
-    # Safe access using .get()
     daily_target = user.get("daily_data_target") or 200
     target_pct = (
         min(100, round((today_data_saved / daily_target) * 100))
@@ -512,7 +641,6 @@ def api_log_data():
     user_id = session["user_id"]
     ip = request.remote_addr or "0.0.0.0"
 
-    # ── 1. Token guard: prevents replay and double-submit ──────────────────
     if not token or token != session.get("log_token"):
         log_event(
             get_db(),
@@ -526,7 +654,6 @@ def api_log_data():
         ), 400
     session.pop("log_token", None)
 
-    # ── 2. Basic input validation ──────────────────────────────────────────
     raw_mb = data.get("mb_saved", 0)
     try:
         mb_saved = int(raw_mb or 0)
@@ -561,14 +688,10 @@ def api_log_data():
 
     db = get_db()
     today = date.today().isoformat()
-
-    # ── 3. Daily cap check (server-authoritative) ──────────────────────────
-    # Read the authoritative today_data_saved from the DB (not the client).
     today_before = _sync_today_data(db, user_id, today)
     remaining_mb = DAILY_DATA_CAP_MB - today_before
 
     if remaining_mb <= 0:
-        # User already hit 2000 MB today — log the abuse attempt and reject.
         log_event(
             db,
             EVENT_DATA_CAP_HIT,
@@ -580,7 +703,7 @@ def api_log_data():
         return jsonify(
             {
                 "success": False,
-                "error": "Daily limit of 2000 MB reached! Try again tomorrow.",
+                "error": "Daily limit reached! Try again tomorrow.",
                 "daily_cap_hit": True,
                 "today_data_saved": today_before,
                 "remaining_mb": 0,
@@ -589,7 +712,6 @@ def api_log_data():
         ), 429
 
     if today_before + mb_saved > DAILY_DATA_CAP_MB:
-        # Submission would overshoot the cap — tell user the exact headroom.
         _reissue_log_token()
         return jsonify(
             {
@@ -600,11 +722,6 @@ def api_log_data():
                 "next_token": session.get("log_token"),
             }
         ), 400
-
-    # ── 4. Minute-level duplicate guard ────────────────────────────────────
-    # Prevents a burst of concurrent requests that all pass the token check
-    # before the first write completes (e.g., two tabs submitting at once).
-    import datetime
 
     sixty_sec_ago = (
         datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(seconds=60)
@@ -634,12 +751,9 @@ def api_log_data():
             }
         ), 429
 
-    # ── 5. All checks passed — compute coins and persist ───────────────────
     today_after = today_before + mb_saved
     coins_earned = math.floor(mb_saved / 100) * COINS_PER_100MB
 
-    # Write today_saved + lifetime together; also stamp last_data_date so
-    # the daily-reset logic in _sync_today_data works correctly next day.
     db.execute(
         """UPDATE users
            SET lifetime_data_saved = lifetime_data_saved + ?,
@@ -657,12 +771,10 @@ def api_log_data():
     else:
         db.commit()
 
-    # ── 6. Check daily target bonus ────────────────────────────────────────
     target_result = _check_target_bonus(db, user_id, today_after, today)
     if target_result.get("bonus", 0) > 0:
         new_balance = get_balance(db, user_id)
 
-    # ── 7. Issue next token ────────────────────────────────────────────────
     _reissue_log_token()
     new_token = session["log_token"]
 
@@ -724,7 +836,6 @@ def api_dashboard_stats():
     today_data_saved = _sync_today_data(db, uid, today)
     user = get_user(uid)
 
-    # Return JSON error if user is missing instead of crashing
     if not user:
         return jsonify({"success": False, "error": "User session invalid."}), 401
 
@@ -736,7 +847,6 @@ def api_dashboard_stats():
     ).fetchone()
     ads_today = ads_row["ads_watched"] if ads_row else 0
 
-    # Safe access using .get() with fallback values
     daily_target = user.get("daily_data_target") or 200
 
     return jsonify(
@@ -790,7 +900,6 @@ def _get_client_ip():
 
 
 def _check_csrf():
-    """Validate CSRF token on AJAX requests. Returns True if valid."""
     data = request.get_json(silent=True) or {}
     client_csrf = data.get("csrf_token") or request.headers.get("X-DC-CSRF", "")
     return bool(client_csrf and client_csrf == session.get("csrf_token"))
@@ -808,7 +917,6 @@ def api_ad_start():
         log_event(db, EVENT_SPAM_ATTEMPT, "Ad start: bad CSRF", user_id=uid, ip=ip)
         return jsonify({"ok": False, "error": "Invalid request."}), 403
 
-    # ── Batch cooldown guard ───────────────────────────────────────────────
     in_cooldown, secs_left = check_cooldown()
     if in_cooldown:
         return jsonify(
@@ -884,7 +992,7 @@ def api_ad_complete():
         log_event(
             db,
             EVENT_AD_DUPLICATE,
-            f"Bad/duplicate token on ad complete",
+            "Bad/duplicate token on ad complete",
             user_id=uid,
             ip=ip,
         )
@@ -893,7 +1001,7 @@ def api_ad_complete():
         ), 400
 
     elapsed = time.time() - session.get("ad_token_time", 0)
-    min_elapsed = AD_DURATION_SECS - 1  # 1s grace
+    min_elapsed = AD_DURATION_SECS - 1
     if elapsed < min_elapsed:
         log_event(
             db,
@@ -911,7 +1019,6 @@ def api_ad_complete():
             }
         ), 400
 
-    # Consume the token immediately to prevent replay
     session.pop("ad_token", None)
     session.pop("ad_token_time", None)
 
@@ -926,7 +1033,7 @@ def api_ad_complete():
         log_event(
             db,
             EVENT_AD_DAILY_LIMIT,
-            f"Tried to complete after daily limit",
+            "Tried to complete after daily limit",
             user_id=uid,
             ip=ip,
         )
@@ -946,28 +1053,17 @@ def api_ad_complete():
     db.execute(
         "UPDATE users SET total_ads_watched = total_ads_watched + 1 WHERE id=?", (uid,)
     )
+
     new_balance = add_coins(db, uid, COINS_PER_AD, "Watched reward ad")
-    new_ads_today = ads_today + 1
-    remaining = max(0, MAX_ADS_PER_DAY - new_ads_today)
+    process_user_milestone_completion(db, uid, COINS_PER_AD)
 
-    # ── Batch cooldown tracking ────────────────────────────────────────────
-    # Grant reward coins and update ad watch count (Ready for Unity Ads / BitLabs callback)
-    db = get_db()
     cursor = db.cursor()
-
-    # Increment user coins (+10 DC Coins per rewarded video)
-    cursor.execute(
-        "UPDATE users SET coins = coins + 10, ads_watched = ads_watched + 1 WHERE id = ?",
-        (uid,),
-    )
-    db.commit()
-
-    # Get updated stats for the JSON response (Separated for PostgreSQL compatibility)
     cursor.execute("SELECT coins, ads_watched FROM users WHERE id = ?", (uid,))
     user_row = cursor.fetchone()
     new_balance = user_row["coins"]
     new_ads_today = user_row["ads_watched"]
 
+    remaining = max(0, MAX_ADS_PER_DAY - new_ads_today)
     batch_result = {
         "ads_in_batch": new_ads_today % AD_BATCH_SIZE,
         "batch_size": AD_BATCH_SIZE,
@@ -978,9 +1074,7 @@ def api_ad_complete():
     log_event(
         db,
         EVENT_AD_COMPLETED,
-        f"Reward granted ({elapsed:.1f}s elapsed) ads_today={new_ads_today} "
-        f"batch={batch_result['ads_in_batch']}/{AD_BATCH_SIZE}"
-        f"{' → cooldown' if batch_result['cooldown_triggered'] else ''}",
+        f"Reward granted ({elapsed:.1f}s elapsed) ads_today={new_ads_today}",
         user_id=uid,
         ip=ip,
     )
@@ -1003,10 +1097,8 @@ def api_ad_complete():
 @app.route("/x/ad/abort", methods=["POST"])
 @login_required
 def api_ad_abort():
-    """Called by the client when an ad is interrupted (tab hidden, page unload)."""
     data = request.get_json(silent=True) or {}
     token = data.get("token", "")
-    reason = data.get("reason", "unknown")[:64]
     uid = session["user_id"]
     ip = _get_client_ip()
     db = get_db()
@@ -1015,509 +1107,6 @@ def api_ad_abort():
     if stored and token == stored:
         session.pop("ad_token", None)
         session.pop("ad_token_time", None)
-        log_event(db, EVENT_AD_ABORTED, f"Ad aborted: {reason}", user_id=uid, ip=ip)
-
-    return jsonify({"ok": True})
-
-
-# ── Routes: Redeem ─────────────────────────────────────────────────────────────
-@app.route("/redeem", methods=["GET", "POST"])
-@login_required
-@rate_limited(redirect_to="redeem")
-def redeem():
-    db = get_db()
-    uid = session["user_id"]
-    user = get_user(uid)
-    ip = _get_client_ip()
-
-    # Check for existing active request BEFORE processing POST
-    active = db.execute(
-        "SELECT * FROM recharge_requests WHERE user_id=? AND status IN ('pending','processing') LIMIT 1",
-        (uid,),
-    ).fetchone()
-
-    if request.method == "POST":
-        # CSRF validation
-        if request.form.get("csrf_token") != session.get("csrf_token"):
-            flash("Security token mismatch. Please try again.", "error")
-            return redirect(url_for("redeem"), 303)
-
-        # Block duplicate requests
-        if active:
-            flash(
-                "You already have a pending or processing request. Wait for it to be resolved.",
-                "error",
-            )
-            log_event(
-                db,
-                EVENT_SPAM_ATTEMPT,
-                f"Tried to create duplicate request while {active['status']} exists",
-                user_id=uid,
-                ip=ip,
-            )
-            return redirect(url_for("redeem"), 303)
-
-        pack_id = request.form.get("pack_id", "").strip()
-        phone = request.form.get("phone", "").strip()
-
-        # Validate pack_id
-        pack = REDEEM_PACKS_BY_ID.get(pack_id)
-        if not pack:
-            flash("Invalid pack selection.", "error")
-            return redirect(url_for("redeem"), 303)
-
-        # Validate phone (exactly 10 digits)
-        err = validate_phone(phone)
-        if err:
-            flash(err, "error")
-            return redirect(url_for("redeem"), 303)
-
-        coins_required = int(pack.get("coins", 0))
-        operator = pack.get("operator", "")
-
-        # Server-side balance check (before deduct, prevents race conditions)
-        balance = int(get_balance(db, uid) or 0)
-        if balance < coins_required:
-            flash(
-                f"Insufficient coins. You need {coins_required} but have {balance}.",
-                "error",
-            )
-            log_event(
-                db,
-                EVENT_SPAM_ATTEMPT,
-                f"Redeem attempt with insufficient funds: {balance}<{coins_required}",
-                user_id=uid,
-                ip=ip,
-            )
-            return redirect(url_for("redeem"), 303)
-
-        # Deduct coins atomically via wallet service (never goes negative)
-        pack_label = f"{pack['name']} — {pack['data']} · {pack['validity']}"
-        try:
-            deduct_coins(
-                db,
-                uid,
-                coins_required,
-                f"{pack['name']} ({pack['data']} · {pack['validity']}) to {phone}",
-            )
-        except InsufficientFundsError:
-            flash("Insufficient coins. Please try again.", "error")
-            return redirect(url_for("redeem"), 303)
-        except WalletError as e:
-            flash(str(e), "error")
-            return redirect(url_for("redeem"), 303)
-
-        # Store phone encoded, insert request (recharge_amount=0 for coin-only packs)
-        enc_phone = encode_phone(phone)
-        db.execute(
-            """INSERT INTO recharge_requests
-               (user_id, phone_number, operator, recharge_pack, recharge_amount, coins_used, status)
-               VALUES (?,?,?,?,0,?,'pending')""",
-            (uid, enc_phone, operator, pack_label, coins_required),
-        )
-        db.commit()
-
-        log_event(
-            db,
-            EVENT_ADMIN_ACTION,
-            f"Recharge request created: {pack['name']} to {phone} via {operator}",
-            user_id=uid,
-            ip=ip,
-        )
-
-        flash(
-            f"{pack['name']} request submitted for {phone}. Processing within 24 hours.",
-            "success",
-        )
-        return redirect(url_for("my_requests"), 303)
-
-    # GET — collect flash messages
-    error = success = None
-    for cat, msg in get_flashed_messages(with_categories=True):
-        if cat == "error":
-            error = msg
-        elif cat == "success":
-            success = msg
-
-    # Phone is now entered fresh at redeem time (not tied to account)
-    prefill_phone = ""
-
-    return render_template(
-        "redeem.html",
-        user=user,
-        packs=REDEEM_PACKS_LIST,
-        decode_phone=decode_phone,
-        prefill_phone=prefill_phone,
-        blocked_request=active,
-        error=error,
-        success=success,
-    )
-
-
-# ── Routes: My Requests ────────────────────────────────────────────────────────
-@app.route("/my_requests")
-@login_required
-def my_requests():
-    db = get_db()
-    uid = session["user_id"]
-    user = get_user(uid)
-
-    requests_list = db.execute(
-        "SELECT * FROM recharge_requests WHERE user_id=? ORDER BY created_at DESC",
-        (uid,),
-    ).fetchall()
-
-    # Find any active (pending/processing) request for the banner
-    active_request = next(
-        (r for r in requests_list if r["status"] in ACTIVE_STATUSES), None
-    )
-
-    return render_template(
-        "my_requests.html",
-        user=user,
-        requests=requests_list,
-        active_request=active_request,
-        decode_phone=decode_phone,
-    )
-
-
-# ── Routes: Admin ──────────────────────────────────────────────────────────────
-@app.route("/admin")
-@admin_required
-def admin():
-    db = get_db()
-
-    users_list = db.execute(
-        """SELECT id, name, phone_encrypted, coins, lifetime_data_saved,
-                  streak, total_ads_watched, created_at, is_admin
-           FROM users ORDER BY created_at DESC"""
-    ).fetchall()
-
-    all_requests = db.execute(
-        """SELECT r.*, u.name AS user_name
-           FROM recharge_requests r
-           JOIN users u ON u.id = r.user_id
-           ORDER BY r.created_at DESC"""
-    ).fetchall()
-
-    stats = db.execute(
-        """SELECT
-               COUNT(*)                        AS total_users,
-               COALESCE(SUM(coins), 0)         AS total_coins,
-               COALESCE(SUM(lifetime_data_saved), 0) AS total_data_mb,
-               COALESCE(SUM(total_ads_watched), 0)   AS total_ads
-           FROM users"""
-    ).fetchone()
-
-    req_stats = db.execute(
-        """SELECT
-               COUNT(*) AS total,
-               COALESCE(SUM(CASE WHEN status='pending'    THEN 1 ELSE 0 END), 0) AS pending,
-               COALESCE(SUM(CASE WHEN status='processing' THEN 1 ELSE 0 END), 0) AS processing,
-               COALESCE(SUM(CASE WHEN status='completed'  THEN 1 ELSE 0 END), 0) AS completed,
-               COALESCE(SUM(CASE WHEN status='failed'     THEN 1 ELSE 0 END), 0) AS failed,
-               COALESCE(SUM(coins_used), 0) AS total_coins_redeemed
-           FROM recharge_requests"""
-    ).fetchone()
-
-    return render_template(
-        "admin.html",
-        users=users_list,
-        all_requests=all_requests,
-        stats=stats,
-        req_stats=req_stats,
-        decode_phone=decode_phone,
-    )
-
-
-@app.route("/admin/request/<int:req_id>/<action>", methods=["POST"])
-@admin_required
-def admin_request_action(req_id, action):
-    if action not in ("complete", "fail", "processing"):
-        return redirect(url_for("admin"), 303)
-    db = get_db()
-    req = db.execute(
-        "SELECT id, user_id, coins_used, status FROM recharge_requests WHERE id=?",
-        (req_id,),
-    ).fetchone()
-    if not req:
-        flash("Request not found.", "error")
-        return redirect(url_for("admin"), 303)
-
-    status = {"complete": "completed", "fail": "failed", "processing": "processing"}[
-        action
-    ]
-
-    # Refund coins when marking as failed (only if not already failed)
-    if status == "failed" and req["status"] != "failed":
-        try:
-            add_coins(
-                db,
-                req["user_id"],
-                req["coins_used"],
-                f"Refund for failed recharge request #{req_id}",
-            )
-        except WalletError:
-            pass  # user may be deleted; log and continue
-
-    db.execute("UPDATE recharge_requests SET status=? WHERE id=?", (status, req_id))
-    db.commit()
-    log_event(
-        db,
-        EVENT_ADMIN_ACTION,
-        f"Request {req_id} marked {status}",
-        user_id=session.get("user_id"),
-        ip=_get_client_ip(),
-    )
-    return redirect(url_for("admin"), 303)
-
-
-@app.route("/x/admin/status", methods=["POST"])
-@admin_required
-def admin_status_ajax():
-    """AJAX status update — returns JSON so the admin page updates without reload."""
-    data = request.get_json(silent=True) or {}
-    req_id = data.get("req_id")
-    new_status = data.get("status", "")
-    valid = ("pending", "processing", "completed", "failed")
-    if not req_id or new_status not in valid:
-        return jsonify({"ok": False, "error": "Invalid parameters"}), 400
-    db = get_db()
-    row = db.execute(
-        "SELECT id, user_id, coins_used, status FROM recharge_requests WHERE id=?",
-        (req_id,),
-    ).fetchone()
-    if not row:
-        return jsonify({"ok": False, "error": "Request not found"}), 404
-
-    # Refund coins when marking as failed (only if not already failed)
-    if new_status == "failed" and row["status"] != "failed":
-        try:
-            add_coins(
-                db,
-                row["user_id"],
-                row["coins_used"],
-                f"Refund for failed recharge request #{req_id}",
-            )
-        except WalletError:
-            pass  # user may be deleted; continue with status update
-
-    db.execute("UPDATE recharge_requests SET status=? WHERE id=?", (new_status, req_id))
-    db.commit()
-    log_event(
-        db,
-        EVENT_ADMIN_ACTION,
-        f"AJAX status update: #{req_id} → {new_status}",
-        user_id=session.get("user_id"),
-        ip=_get_client_ip(),
-    )
-    return jsonify({"ok": True, "req_id": req_id, "status": new_status})
-
-
-@app.route("/admin/export/pending.csv")
-@admin_required
-def admin_export_pending():
-    """Download pending requests as CSV — filename includes today's date."""
-    import csv, io
-
-    db = get_db()
-    rows = db.execute(
-        """SELECT r.id, u.name AS user_name, r.phone_number, r.operator,
-                  r.recharge_pack, r.recharge_amount, r.coins_used, r.created_at
-           FROM recharge_requests r
-           JOIN users u ON u.id = r.user_id
-           WHERE r.status = 'pending'
-           ORDER BY r.created_at DESC"""
-    ).fetchall()
-
-    buf = io.StringIO()
-    w = csv.writer(buf)
-    w.writerow(
-        [
-            "ID",
-            "User",
-            "Phone",
-            "Operator",
-            "Pack",
-            "Amount (INR)",
-            "Coins Used",
-            "Submitted At",
-        ]
-    )
-    for r in rows:
-        w.writerow(
-            [
-                r["id"],
-                r["user_name"],
-                decode_phone(r["phone_number"]),
-                r["operator"],
-                r["recharge_pack"],
-                r["recharge_amount"],
-                r["coins_used"],
-                r["created_at"][:16].replace("T", " "),
-            ]
-        )
-
-    filename = f"pending_requests_{date.today().isoformat().replace('-', '_')}.csv"
-    return app.response_class(
-        buf.getvalue(),
-        mimetype="text/csv",
-        headers={"Content-Disposition": f"attachment; filename={filename}"},
-    )
-
-
-# ── Template context helpers ───────────────────────────────────────────────────
-@app.context_processor
-def inject_helpers():
-    def get_user_coins():
-        if "user_id" not in session:
-            return 0
-        row = (
-            get_db()
-            .execute("SELECT coins FROM users WHERE id=?", (session["user_id"],))
-            .fetchone()
-        )
-        return row["coins"] if row else 0
-
-    # Per-session CSRF token (regenerated on new session)
-    if "csrf_token" not in session:
-        session["csrf_token"] = secrets.token_hex(24)
-
-    return {
-        "get_user_coins": get_user_coins,
-        "csrf_token": session.get("csrf_token", ""),
-    }
-
-
-# ── Routes: Secret Admin Panel ─────────────────────────────────────────────────
-@app.route("/secret-admin-panel", methods=["GET", "POST"])
-def secret_admin_panel():
-    db = get_db()
-
-    # ── Logout ──
-    if request.args.get("logout"):
-        session.pop(SECRET_ADMIN_SESSION_KEY, None)
-        return redirect("/secret-admin-panel", 303)
-
-    auth_error = None
-    flash_msg = None
-
-    # ── POST: login or action ──
-    if request.method == "POST":
-        action = request.form.get("action", "")
-
-        if action == "login":
-            if request.form.get("password", "") == SECRET_ADMIN_PASSWORD:
-                session[SECRET_ADMIN_SESSION_KEY] = True
-                return redirect("/secret-admin-panel", 303)
-            auth_error = "Incorrect password. Try again."
-
-        elif action == "charge":
-            if not session.get(SECRET_ADMIN_SESSION_KEY):
-                return redirect("/secret-admin-panel", 303)
-            req_id = request.form.get("req_id", "")
-            if req_id and req_id.isdigit():
-                db.execute(
-                    "UPDATE recharge_requests SET status='completed' WHERE id=? AND status='pending'",
-                    (int(req_id),),
-                )
-                db.commit()
-                log_event(
-                    db,
-                    EVENT_ADMIN_ACTION,
-                    f"Secret ops panel: request #{req_id} marked completed",
-                    user_id=None,
-                    ip=_get_client_ip(),
-                )
-                flash_msg = f"Request #{req_id} marked as Charged ✓"
-            return redirect("/secret-admin-panel", 303)
-
-    authed = session.get(SECRET_ADMIN_SESSION_KEY, False)
-
-    if not authed:
-        return render_template("secret_admin.html", authed=False, auth_error=auth_error)
-
-    # ── Fetch data ──
-    rows = db.execute(
-        """SELECT r.id, u.name AS user_name, r.phone_number, r.operator,
-                  r.recharge_pack, r.coins_used, r.status,
-                  r.created_at
-           FROM recharge_requests r
-           JOIN users u ON u.id = r.user_id
-           ORDER BY r.created_at DESC"""
-    ).fetchall()
-
-    def fmt_row(r):
-        pack_name = (
-            r["recharge_pack"].split(" — ")[0]
-            if " — " in r["recharge_pack"]
-            else r["recharge_pack"]
-        )
-        return {
-            "id": r["id"],
-            "user_name": r["user_name"],
-            "phone": decode_phone(r["phone_number"]),
-            "operator": r["operator"],
-            "pack_name": pack_name,
-            "coins_used": r["coins_used"],
-            "status": r["status"],
-            "created_at": r["created_at"][:16].replace("T", " "),
-        }
-
-    all_rows = [fmt_row(r) for r in rows]
-    pending = [r for r in all_rows if r["status"] == "pending"]
-    history = [r for r in all_rows if r["status"] != "pending"]
-
-    stats = {
-        "total": len(all_rows),
-        "pending": len(pending),
-        "completed": sum(1 for r in all_rows if r["status"] == "completed"),
-        "coins": sum(r["coins_used"] for r in all_rows),
-    }
-
-    return render_template(
-        "secret_admin.html",
-        authed=True,
-        pending=pending,
-        history=history,
-        stats=stats,
-        flash_msg=flash_msg,
-    )
-
-
-# ── Routes: Delete Account ─────────────────────────────────────────────────────
-@app.route("/x/delete-account", methods=["POST"])
-@login_required
-@rate_limited(is_api=True)
-def api_delete_account():
-    uid = session["user_id"]
-    ip = _get_client_ip()
-    db = get_db()
-
-    # Security check to prevent malicious requests
-    if not _check_csrf():
-        log_event(
-            db, EVENT_SPAM_ATTEMPT, "Delete account: bad CSRF", user_id=uid, ip=ip
-        )
-        return jsonify({"success": False, "error": "Invalid request."}), 403
-
-    # Log the event before deleting
-    log_event(db, EVENT_ADMIN_ACTION, f"User deleted their account", user_id=uid, ip=ip)
-
-    # Delete the user and their related data (Prevents database clutter)
-    db.execute("DELETE FROM recharge_requests WHERE user_id=?", (uid,))
-    db.execute("DELETE FROM ad_rewards WHERE user_id=?", (uid,))
-    db.execute("DELETE FROM transactions WHERE user_id=?", (uid,))
-    db.execute("DELETE FROM users WHERE id=?", (uid,))
-    db.commit()
-
-    # Clear the session (Logs the user out automatically)
-    session.clear()
-
-    return jsonify({"success": True, "message": "Account successfully deleted"})
-
-
-if __name__ == "__main__":
-    init_db(app)
-    port = int(os.environ.get("PORT", 5000))
-    app.run(host="0.0.0.0", port=port, debug=False)
+        log_event(db, EVENT_AD_ABORTED, "Ad aborted", user_id=uid, ip=ip)
+        return jsonify({"ok": True})
+    return jsonify({"ok": False})
