@@ -538,7 +538,7 @@ def dashboard():
 # ── Routes: Requests / History Page ────────────────────────────────────────────
 @app.route("/requests")
 @login_required
-def requests_page():
+def my_requests():
     db = get_db()
     uid = session["user_id"]
     user = get_user(uid)
