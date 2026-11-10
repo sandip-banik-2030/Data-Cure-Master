@@ -73,36 +73,44 @@ def make_session_permanent():
 COINS_PER_100MB = 5
 COINS_PER_AD = 10
 COINS_PER_RUPEE = 100
-MAX_ADS_PER_DAY = 15
+MAX_ADS_PER_DAY = 25
 MB_PER_REWARD = 100
 AD_BATCH_SIZE = 5
 AD_BATCH_COOLDOWN_SECS = 60
 AD_DURATION_SECS = 30
 FIXED_OTP = "1234"
+
 REDEEM_PACKS_LIST = [
+    # --- Jio Packs ---
+    {
+        "id": "jio_11_1h",
+        "name": "Jio Unlimited Data",
+        "operator": "Jio",
+        "data": "Unlimited Data",
+        "validity": "1 Hour",
+        "voice": "No Voice",
+        "sms": "0 SMS",
+        "coins": 1700,
+    },
+    {
+        "id": "jio_15_1d",
+        "name": "Jio Unlimited 5G Data",
+        "operator": "Jio",
+        "data": "Unlimited 5G Data",
+        "validity": "24 Hours",
+        "voice": "No Voice",
+        "sms": "0 SMS",
+        "coins": 2300,
+    },
     {
         "id": "jio_1gb_1d",
         "name": "Jio 1GB Booster",
         "operator": "Jio",
         "data": "1 GB",
         "validity": "1 Day",
-        "coins": 2250,
-    },
-    {
-        "id": "airtel_1gb_1d",
-        "name": "Airtel 1GB Booster",
-        "operator": "Airtel",
-        "data": "1 GB",
-        "validity": "1 Day",
-        "coins": 2250,
-    },
-    {
-        "id": "vi_1gb_1d",
-        "name": "Vi 1GB Booster",
-        "operator": "Vi",
-        "data": "1 GB",
-        "validity": "1 Day",
-        "coins": 2250,
+        "voice": "No Voice",
+        "sms": "0 SMS",
+        "coins": 2800,
     },
     {
         "id": "jio_2gb_2d",
@@ -110,23 +118,90 @@ REDEEM_PACKS_LIST = [
         "operator": "Jio",
         "data": "2 GB",
         "validity": "2 Days",
+        "voice": "No Voice",
+        "sms": "0 SMS",
+        "coins": 4200,
+    },
+    {
+        "id": "jio_49_1d",
+        "name": "Jio Unlimited Pack",
+        "operator": "Jio",
+        "data": "Unlimited 4G/5G",
+        "validity": "1 Day",
+        "voice": "No Voice",
+        "sms": "0 SMS",
+        "coins": 7200,
+    },
+    {
+        "id": "jio_6gb_7d",
+        "name": "Jio 6GB Booster",
+        "operator": "Jio",
+        "data": "6 GB",
+        "validity": "7 Days",
+        "voice": "No Voice",
+        "sms": "0 SMS",
+        "coins": 10000,
+    },
+    {
+        "id": "jio_199_combo",
+        "name": "Jio Voice Combo",
+        "operator": "Jio",
+        "data": "1.5 GB / Day",
+        "validity": "18 Days",
+        "voice": "Unlimited Calls",
+        "sms": "100 SMS/day",
+        "coins": 28500,
+    },
+    {
+        "id": "jio_249_combo",
+        "name": "Jio Voice Combo",
+        "operator": "Jio",
+        "data": "1 GB / Day",
+        "validity": "28 Days",
+        "voice": "Unlimited Calls",
+        "sms": "100 SMS/day",
+        "coins": 35500,
+    },
+    # --- Airtel Packs ---
+    {
+        "id": "airtel_22_1d",
+        "name": "Airtel 1GB Booster",
+        "operator": "Airtel",
+        "data": "1 GB",
+        "validity": "1 Day",
+        "voice": "No Voice",
+        "sms": "0 SMS",
         "coins": 3200,
     },
     {
-        "id": "vi_6gb_2d",
-        "name": "Vi 6GB Booster",
-        "operator": "Vi",
-        "data": "6 GB",
-        "validity": "2 Days",
-        "coins": 8250,
+        "id": "airtel_26_1d",
+        "name": "Airtel 1.5GB Booster",
+        "operator": "Airtel",
+        "data": "1.5 GB",
+        "validity": "1 Day",
+        "voice": "No Voice",
+        "sms": "0 SMS",
+        "coins": 3800,
     },
     {
-        "id": "bsnl_ul_2d",
-        "name": "BSNL Unlimited + 1GB/Day",
-        "operator": "BSNL",
-        "data": "Unlimited+1GB/Day",
-        "validity": "2 Days",
-        "coins": 2250,
+        "id": "airtel_33_1d",
+        "name": "Airtel 2GB Booster",
+        "operator": "Airtel",
+        "data": "2 GB",
+        "validity": "1 Day",
+        "voice": "No Voice",
+        "sms": "0 SMS",
+        "coins": 4800,
+    },
+    {
+        "id": "airtel_49_1d",
+        "name": "Airtel Unlimited Data",
+        "operator": "Airtel",
+        "data": "Unlimited Data",
+        "validity": "1 Day",
+        "voice": "No Voice",
+        "sms": "0 SMS",
+        "coins": 7200,
     },
     {
         "id": "airtel_5gb_7d",
@@ -134,17 +209,204 @@ REDEEM_PACKS_LIST = [
         "operator": "Airtel",
         "data": "5 GB",
         "validity": "7 Days",
-        "coins": 8500,
+        "voice": "No Voice",
+        "sms": "0 SMS",
+        "coins": 11000,
+    },
+    {
+        "id": "airtel_99_2d",
+        "name": "Airtel Unlimited Data",
+        "operator": "Airtel",
+        "data": "Unlimited Data",
+        "validity": "2 Days",
+        "voice": "No Voice",
+        "sms": "0 SMS",
+        "coins": 14200,
+    },
+    {
+        "id": "airtel_100_30d",
+        "name": "Airtel 6GB Data Pack",
+        "operator": "Airtel",
+        "data": "6 GB",
+        "validity": "30 Days",
+        "voice": "No Voice",
+        "sms": "0 SMS",
+        "coins": 14500,
+    },
+    {
+        "id": "airtel_379_combo",
+        "name": "Airtel Unlimited Combo",
+        "operator": "Airtel",
+        "data": "2 GB / Day + 5G",
+        "validity": "30 Days",
+        "voice": "Unlimited Calls",
+        "sms": "100 SMS/day",
+        "coins": 54000,
+    },
+    # --- Vodafone Idea (Vi) Packs ---
+    {
+        "id": "vi_44_1d",
+        "name": "Vi 1GB Data Pack",
+        "operator": "Vi",
+        "data": "1 GB",
+        "validity": "1 Day",
+        "voice": "No Voice",
+        "sms": "0 SMS",
+        "coins": 6400,
+    },
+    {
+        "id": "vi_48_3d",
+        "name": "Vi 6GB Data Pack",
+        "operator": "Vi",
+        "data": "6 GB",
+        "validity": "3 Days",
+        "voice": "No Voice",
+        "sms": "0 SMS",
+        "coins": 7000,
+    },
+    {
+        "id": "vi_89_7d",
+        "name": "Vi 6GB Freedom Pack",
+        "operator": "Vi",
+        "data": "6 GB",
+        "validity": "7 Days",
+        "voice": "No Voice",
+        "sms": "0 SMS",
+        "coins": 12800,
+    },
+    {
+        "id": "vi_99_2d",
+        "name": "Vi Unlimited Data",
+        "operator": "Vi",
+        "data": "Unlimited Data",
+        "validity": "2 Days",
+        "voice": "No Voice",
+        "sms": "0 SMS",
+        "coins": 14200,
+    },
+    {
+        "id": "vi_139_28d",
+        "name": "Vi 12GB Data Pack",
+        "operator": "Vi",
+        "data": "12 GB",
+        "validity": "28 Days",
+        "voice": "No Voice",
+        "sms": "0 SMS",
+        "coins": 20000,
+    },
+    {
+        "id": "vi_175_28d",
+        "name": "Vi 10GB OTT Pack",
+        "operator": "Vi",
+        "data": "10 GB",
+        "validity": "28 Days",
+        "voice": "No Voice",
+        "sms": "0 SMS",
+        "coins": 25200,
+    },
+    {
+        "id": "vi_6gb_2d",
+        "name": "Vi 6GB Booster",
+        "operator": "Vi",
+        "data": "6 GB",
+        "validity": "2 Days",
+        "voice": "No Voice",
+        "sms": "0 SMS",
+        "coins": 28800,
+    },
+    {
+        "id": "vi_348_wfh",
+        "name": "Vi Work From Home Pack",
+        "operator": "Vi",
+        "data": "50 GB",
+        "validity": "28 Days",
+        "voice": "No Voice",
+        "sms": "0 SMS",
+        "coins": 50000,
+    },
+    # --- BSNL Packs ---
+    {
+        "id": "bsnl_39_1d",
+        "name": "BSNL 20GB Data Pack",
+        "operator": "BSNL",
+        "data": "20 GB",
+        "validity": "1 Day",
+        "voice": "No Voice",
+        "sms": "0 SMS",
+        "coins": 5600,
+    },
+    {
+        "id": "bsnl_49_30d",
+        "name": "BSNL 10GB Data Pack",
+        "operator": "BSNL",
+        "data": "10 GB",
+        "validity": "30 Days",
+        "voice": "No Voice",
+        "sms": "0 SMS",
+        "coins": 7200,
+    },
+    {
+        "id": "bsnl_58_7d",
+        "name": "BSNL 8GB Data Pack",
+        "operator": "BSNL",
+        "data": "8 GB",
+        "validity": "7 Days",
+        "voice": "No Voice",
+        "sms": "0 SMS",
+        "coins": 8400,
+    },
+    {
+        "id": "bsnl_105_7d",
+        "name": "BSNL 20GB Data Pack",
+        "operator": "BSNL",
+        "data": "20 GB",
+        "validity": "7 Days",
+        "voice": "No Voice",
+        "sms": "0 SMS",
+        "coins": 15200,
+    },
+    {
+        "id": "bsnl_151_30d",
+        "name": "BSNL 40GB Data Pack",
+        "operator": "BSNL",
+        "data": "40 GB",
+        "validity": "30 Days",
+        "voice": "No Voice",
+        "sms": "0 SMS",
+        "coins": 21800,
+    },
+    {
+        "id": "bsnl_198_30d",
+        "name": "BSNL 40GB Data Pack",
+        "operator": "BSNL",
+        "data": "40 GB",
+        "validity": "30 Days",
+        "voice": "No Voice",
+        "sms": "0 SMS",
+        "coins": 28500,
     },
     {
         "id": "bsnl_ul_7d",
-        "name": "BSNL Unlimited + 1GB/Day",
+        "name": "BSNL Unlimited Combo",
         "operator": "BSNL",
-        "data": "Unlimited+1GB/Day",
+        "data": "1 GB / Day",
         "validity": "7 Days",
-        "coins": 6500,
+        "voice": "Unlimited Calls",
+        "sms": "100 SMS/day",
+        "coins": 33000,
+    },
+    {
+        "id": "bsnl_599_combo",
+        "name": "BSNL Long-Term Combo",
+        "operator": "BSNL",
+        "data": "3 GB / Day",
+        "validity": "70 Days",
+        "voice": "Unlimited Calls",
+        "sms": "100 SMS/day",
+        "coins": 86500,
     },
 ]
+
 REDEEM_PACKS_BY_ID = {p["id"]: p for p in REDEEM_PACKS_LIST}
 OPERATORS = ["Jio", "Airtel", "Vi", "BSNL"]
 ACTIVE_STATUSES = ("pending", "processing")
@@ -1061,11 +1323,17 @@ def api_ad_complete():
         log_event(
             db,
             EVENT_AD_DAILY_LIMIT,
-            "Tried to complete after daily limit",
+            f"Daily limit hit ({ads_today}/{MAX_ADS_PER_DAY})",
             user_id=uid,
             ip=ip,
         )
-        return jsonify({"ok": False, "error": "Daily limit reached."}), 429
+        return jsonify(
+            {
+                "ok": False,
+                "reason": "daily_limit",
+                "error": f"Daily limit of {MAX_ADS_PER_DAY} ads reached.",
+            }
+        ), 429
 
     if ads_row:
         db.execute(
@@ -1074,67 +1342,47 @@ def api_ad_complete():
         )
     else:
         db.execute(
-            "INSERT INTO ad_rewards (user_id, reward_date, ads_watched) VALUES (?,?,1)",
+            "INSERT INTO ad_rewards (user_id, reward_date, ads_watched) VALUES (?, ?, 1)",
             (uid, today),
         )
 
-    db.execute(
-        "UPDATE users SET total_ads_watched = total_ads_watched + 1 WHERE id=?", (uid,)
-    )
+    add_coins(db, uid, COINS_PER_AD, "Rewarded Video Ad")
 
-    new_balance = add_coins(db, uid, COINS_PER_AD, "Watched reward ad")
-    process_user_milestone_completion(db, uid, COINS_PER_AD)
+    batch_count = session.get("batch_count", 0) + 1
+    in_cooldown = False
+    cooldown_secs_left = 0
 
-    cursor = db.cursor()
-    cursor.execute("SELECT coins, ads_watched FROM users WHERE id = ?", (uid,))
-    user_row = cursor.fetchone()
-    new_balance = user_row["coins"]
-    new_ads_today = user_row["ads_watched"]
+    if batch_count >= AD_BATCH_SIZE:
+        batch_count = 0
+        in_cooldown = True
+        cooldown_secs_left = AD_BATCH_COOLDOWN_SECS
 
-    remaining = max(0, MAX_ADS_PER_DAY - new_ads_today)
-    batch_result = {
-        "ads_in_batch": new_ads_today % AD_BATCH_SIZE,
-        "batch_size": AD_BATCH_SIZE,
-        "cooldown_triggered": False,
-        "cooldown_secs": 0,
-    }
+    session["batch_count"] = batch_count
+    session["in_cooldown"] = in_cooldown
+    session["cooldown_secs_left"] = cooldown_secs_left
+
+    db.commit()
 
     log_event(
         db,
         EVENT_AD_COMPLETED,
-        f"Reward granted ({elapsed:.1f}s elapsed) ads_today={new_ads_today}",
+        f"Ad completed successfully (+{COINS_PER_AD} coins)",
         user_id=uid,
         ip=ip,
     )
 
+    new_balance = get_balance(db, uid)
+    process_user_milestone_completion(db, uid, COINS_PER_AD)
+
     return jsonify(
         {
             "ok": True,
-            "new_coins": COINS_PER_AD,
-            "total_coins": new_balance,
-            "ads_today": new_ads_today,
-            "remaining": remaining,
-            "batch_pos": batch_result["ads_in_batch"],
-            "batch_size": batch_result["batch_size"],
-            "cooldown_triggered": batch_result["cooldown_triggered"],
-            "cooldown_secs": batch_result["cooldown_secs"],
+            "coins_earned": COINS_PER_AD,
+            "new_balance": new_balance,
+            "ads_today": ads_today + 1,
+            "max_ads": MAX_ADS_PER_DAY,
+            "batch_count": batch_count,
+            "in_cooldown": in_cooldown,
+            "cooldown_secs_left": cooldown_secs_left,
         }
     )
-
-
-@app.route("/x/ad/abort", methods=["POST"])
-@login_required
-def api_ad_abort():
-    data = request.get_json(silent=True) or {}
-    token = data.get("token", "")
-    uid = session["user_id"]
-    ip = _get_client_ip()
-    db = get_db()
-
-    stored = session.get("ad_token")
-    if stored and token == stored:
-        session.pop("ad_token", None)
-        session.pop("ad_token_time", None)
-        log_event(db, EVENT_AD_ABORTED, "Ad aborted", user_id=uid, ip=ip)
-        return jsonify({"ok": True})
-    return jsonify({"ok": False})

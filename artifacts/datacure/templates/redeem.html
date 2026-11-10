@@ -78,7 +78,7 @@
         <label
           class="pack-card {% if not affordable %}pack-disabled{% endif %}"
           id="pack-label-{{ pack['id'] }}"
-          onclick="onPackSelect('{{ pack['id'] }}', {{ pack['coins'] }}, '{{ pack['operator'] }}', '{{ pack['name'] }}', '{{ pack['data'] }}', '{{ pack['validity'] }}')"
+          onclick="onPackSelect('{{ pack['id'] }}', {{ pack['coins'] }}, '{{ pack['operator'] }}', '{{ pack['name'] }}', '{{ pack['data'] }}', '{{ pack['validity'] }}', '{{ pack.get('voice', 'No Voice') }}', '{{ pack.get('sms', '0 SMS') }}')"
         >
           <input
             type="radio"
@@ -105,7 +105,16 @@
             </div>
             <div class="pack-data">{{ pack['data'] }}</div>
             <div class="pack-validity">{{ pack['validity'] }}</div>
-            <div class="pack-coins-tag">{{ pack['coins'] }} coins</div>
+            <div
+              class="pack-sub-detail"
+              style="font-size: 11px; color: #a0aec0; margin-top: 4px"
+            >
+              <span>{{ pack.get('voice', 'No Voice') }}</span> |
+              <span>{{ pack.get('sms', '0 SMS') }}</span>
+            </div>
+            <div class="pack-coins-tag" style="margin-top: 6px">
+              {{ pack['coins'] }} coins
+            </div>
             {% if not affordable %}
             <div class="pack-shortage">
               Need {{ pack['coins'] - user['coins'] }} more
@@ -185,13 +194,16 @@
     <div class="card info-card">
       <h3 class="info-title">Pack Details</h3>
       {% for pack in packs %}
-      <div class="pack-detail-row">
+      <div class="pack-detail-row" style="margin-bottom: 8px">
         <div class="pd-amount op-dot-{{ pack['operator'] | lower }}">
           {{ pack['operator'] }}
         </div>
         <div class="pd-meta">
           <span class="pd-data">{{ pack['data'] }}</span>
           <span class="pd-validity">{{ pack['validity'] }}</span>
+          <div style="font-size: 10px; color: #a0aec0">
+            {{ pack.get('voice', 'No Voice') }} | {{ pack.get('sms', '0 SMS') }}
+          </div>
         </div>
         <div class="pd-coins">
           {{ pack['coins'] }}<span class="pd-coins-label"> coins</span>
@@ -223,7 +235,7 @@
   let selectedCoins  = null;
   let selectedOp     = null;
 
-  function onPackSelect(id, coins, operator, name, data, validity) {
+  function onPackSelect(id, coins, operator, name, data, validity, voice, sms) {
     selectedId    = id;
     selectedCoins = coins;
     selectedOp    = operator;
@@ -289,6 +301,8 @@
       `Confirm recharge request?\n\n` +
       `Pack:     ${pack.name}\n` +
       `Data:     ${pack.data} · ${pack.validity}\n` +
+      `Calls:    ${pack.voice || 'No Voice'}\n` +
+      `SMS:      ${pack.sms || '0 SMS'}\n` +
       `Number:   ${phone}\n` +
       `Operator: ${pack.operator}\n` +
       `Coins:    ${selectedCoins} deducted immediately\n\n` +
